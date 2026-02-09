@@ -1,0 +1,41 @@
+# Edge Engine Configuration
+# =========================
+
+# Kalshi API settings
+kalshi:
+  base_url: "https://trading-api.kalshi.com/trade-api/v2"
+  # Set via environment: KALSHI_API_KEY
+  use_mock: true  # Set to false when using real API
+
+# Weather API settings (OpenWeatherMap)
+weather:
+  base_url: "https://api.openweathermap.org/data/2.5"
+  # Set via environment: OPENWEATHER_API_KEY
+  use_mock: true  # Set to false when using real API
+
+# Edge detection parameters
+edge:
+  threshold: 0.05          # Minimum edge to trigger signal (5%)
+  confidence_decay_hours: 6  # Data older than this reduces confidence
+
+# Polling configuration
+polling:
+  interval_seconds: 30     # How often to check markets
+  markets_per_cycle: 10    # Max markets to evaluate per cycle
+
+# Signal emission
+signal:
+  mode: "console"          # Options: "console", "http"
+  http_endpoint: "http://localhost:8080/api/signals"  # For Spring Boot integration
+
+# Logging
+logging:
+  level: "INFO"            # DEBUG, INFO, WARNING, ERROR
+
+# Markets to monitor (weather-related)
+# These are example market patterns - actual Kalshi market IDs may differ
+markets:
+  weather:
+    - ticker_pattern: "HIGHNY-*"  # NYC high temperature markets
+    - ticker_pattern: "LOWNY-*"   # NYC low temperature markets
+    - ticker_pattern: "WEATHER-*" # General weather markets
