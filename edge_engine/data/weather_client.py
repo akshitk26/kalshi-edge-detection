@@ -70,6 +70,10 @@ class WeatherClient:
         "Philadelphia": (39.9526, -75.1652),
         "San Francisco": (37.7749, -122.4194),
         "Boston": (42.3601, -71.0589),
+        "New Orleans": (29.9511, -90.0715),
+        "Las Vegas": (36.1699, -115.1398),
+        "Minneapolis": (44.9778, -93.2650),
+        # Aliases
         "NYC": (40.7128, -74.0060),
         "LA": (34.0522, -118.2437),
     }

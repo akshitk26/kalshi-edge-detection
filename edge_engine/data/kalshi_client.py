@@ -165,14 +165,26 @@ class KalshiClient:
         # Temperature series on Kalshi
         # Format: KXHIGH{CITY} for high temps, KXLOW{CITY} for low temps
         temp_series = [
-            "KXHIGHNY",   # NYC high
-            "KXHIGHLAX",  # LA high  
-            "KXHIGHCHI",  # Chicago high
-            "KXHIGHMIA",  # Miami high
-            "KXHIGHSF",   # San Francisco high
-            "KXLOWNY",    # NYC low
-            "KXLOWTCHI",  # Chicago low
-            "KXLOWDEN",   # Denver low
+            # High temperature markets
+            "KXHIGHNY",    # NYC high
+            "KXHIGHLAX",   # LA high  
+            "KXHIGHCHI",   # Chicago high
+            "KXHIGHMIA",   # Miami high
+            "KXHIGHSF",    # San Francisco high
+            "KXHIGHDEN",   # Denver high
+            "KXHIGHBOS",   # Boston high
+            "KXHIGHPHL",   # Philadelphia high
+            "KXHIGHATL",   # Atlanta high
+            "KXHIGHPHX",   # Phoenix high
+            "KXHIGHNOLA",  # New Orleans high
+            "KXHIGHLV",    # Las Vegas high
+            "KXHIGHMIN",   # Minneapolis high
+            # Low temperature markets
+            "KXLOWNY",     # NYC low
+            "KXLOWTCHI",   # Chicago low
+            "KXLOWDEN",    # Denver low
+            "KXLOWBOS",    # Boston low
+            "KXLOWMIN",    # Minneapolis low
         ]
         
         weather_markets = []
@@ -418,6 +430,11 @@ class KalshiClient:
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
                 "BOS": "Boston",
+                "NOLA": "New Orleans",
+                "LV": "Las Vegas",
+                "VEG": "Las Vegas",
+                "MSP": "Minneapolis",
+                "MIN": "Minneapolis",
             }
             
             return {
@@ -456,6 +473,11 @@ class KalshiClient:
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
                 "BOS": "Boston",
+                "NOLA": "New Orleans",
+                "LV": "Las Vegas",
+                "VEG": "Las Vegas",
+                "MSP": "Minneapolis",
+                "MIN": "Minneapolis",
             }
             
             return {
@@ -481,6 +503,19 @@ class KalshiClient:
                 "LA": "Los Angeles",
                 "CHI": "Chicago",
                 "MIA": "Miami",
+                "SF": "San Francisco",
+                "DEN": "Denver",
+                "ATL": "Atlanta",
+                "DAL": "Dallas",
+                "HOU": "Houston",
+                "PHX": "Phoenix",
+                "PHL": "Philadelphia",
+                "BOS": "Boston",
+                "NOLA": "New Orleans",
+                "LV": "Las Vegas",
+                "VEG": "Las Vegas",
+                "MSP": "Minneapolis",
+                "MIN": "Minneapolis",
             }
             
             if "below" in market.question.lower():
