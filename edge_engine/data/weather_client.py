@@ -184,12 +184,25 @@ class WeatherClient:
         high_temp = max(temps)
         low_temp = min(temps)
         
-        # Standard deviation estimate (weather models typically have ~2-4°F error)
-        # Increases with forecast horizon
+        # Standard deviation estimate based on forecast horizon
+        # Near-term forecasts are much more accurate than long-term
         hours_ahead = (target_date - now).total_seconds() / 3600
-        base_std = 2.5
-        std_per_day = 0.8
-        forecast_std = base_std + (hours_ahead / 24) * std_per_day
+        
+        if hours_ahead <= 12:
+            # Same-day forecast: very accurate
+            forecast_std = 1.0
+        elif hours_ahead <= 24:
+            # Next 24 hours: still quite accurate
+            forecast_std = 1.5
+        elif hours_ahead <= 48:
+            # 1-2 days ahead: moderate uncertainty
+            forecast_std = 2.0
+        elif hours_ahead <= 72:
+            # 2-3 days ahead: higher uncertainty
+            forecast_std = 2.5
+        else:
+            # 3+ days ahead: significant uncertainty
+            forecast_std = 3.0 + (hours_ahead - 72) / 24 * 0.3
         
         return WeatherData(
             location=location,
@@ -222,38 +235,44 @@ class WeatherClient:
             "New York": {
                 "high": 31.0,  # Cold February day in NYC
                 "low": 22.0,
-                "high_std": 3.0,
-                "low_std": 2.5
+                "high_std": 1.5,
+                "low_std": 1.5
             },
             "Los Angeles": {
                 "high": 72.0,  # Mild LA winter
                 "low": 54.0,
-                "high_std": 2.5,
-                "low_std": 2.0
+                "high_std": 1.5,
+                "low_std": 1.5
             },
             "Chicago": {
-                "high": 28.0,  # Cold Chicago February
-                "low": 18.0,
-                "high_std": 4.0,
-                "low_std": 3.5
+                "high": 39.0,  # Chicago February
+                "low": 28.0,
+                "high_std": 1.5,
+                "low_std": 1.5
             },
             "Miami": {
                 "high": 79.0,
                 "low": 68.0,
-                "high_std": 2.0,
-                "low_std": 2.0
+                "high_std": 1.5,
+                "low_std": 1.5
             },
             "San Francisco": {
                 "high": 58.0,
                 "low": 48.0,
-                "high_std": 2.5,
-                "low_std": 2.0
+                "high_std": 1.5,
+                "low_std": 1.5
             },
             "Denver": {
-                "high": 42.0,
-                "low": 24.0,
-                "high_std": 5.0,  # Mountain weather is more variable
-                "low_std": 4.5
+                "high": 70.5,  # Denver February (warm day)
+                "low": 45.0,
+                "high_std": 1.5,
+                "low_std": 1.5
+            },
+            "Philadelphia": {
+                "high": 29.3,  # Philadelphia February
+                "low": 20.0,
+                "high_std": 1.0,
+                "low_std": 1.0
             }
         }
         

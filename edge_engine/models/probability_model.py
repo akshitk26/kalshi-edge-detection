@@ -113,18 +113,49 @@ class WeatherProbabilityModel:
             # Bucket market: P(lower <= temp < upper)
             lower = params["lower_bound"]
             upper = params["upper_bound"]
-            fair_prob = self._calculate_bucket_probability(weather, lower, upper, threshold_type)
+            fair_prob_raw = self._calculate_bucket_probability(weather, lower, upper, threshold_type)
             threshold = params["threshold_temp"]  # midpoint for display
         else:
             # Threshold market: P(temp > threshold) or P(temp < threshold)
             threshold = params["threshold_temp"]
-            fair_prob = self._calculate_probability(weather, threshold, threshold_type)
-        
-        # Calculate edge
-        edge = fair_prob - market.market_prob
+            fair_prob_raw = self._calculate_probability(weather, threshold, threshold_type)
         
         # Calculate confidence score
         confidence = self._calculate_confidence(weather, market)
+        
+        # === TRADER SAFEGUARDS ===
+        # Apply confidence-weighted edge calculation
+        # to prevent unrealistic edges from naive statistical models
+        
+        # Use raw probability as fair value
+        fair_prob = fair_prob_raw
+        
+        # 1. Calculate confidence-weighted edge
+        #    Don't claim huge edges when confidence is low
+        #    A 50% edge with 30% confidence shouldn't trigger trades
+        raw_edge = fair_prob - market.market_prob
+        edge = raw_edge * confidence
+        
+        # 2. Extreme market guardrail
+        #    Markets at 1-10% or 90-100% require high confidence to override
+        #    Prevents false signals from statistical tail probabilities
+        is_extreme_market = market.market_prob < 0.10 or market.market_prob > 0.90
+        if is_extreme_market and confidence < 0.8:
+            # Suppress edge for extreme markets unless we're very confident
+            # These markets are often correctly priced by informed traders
+            edge = 0.0
+        
+        # 3. Extreme edge guardrail (data quality check)
+        #    Edges >50% are almost always data issues, not real opportunities
+        #    Suppress these unless market has strong liquidity
+        if abs(raw_edge) > 0.50:
+            # Only trust extreme edges if market is liquid
+            if not market.has_liquidity or market.market_prob < 0.02:
+                edge = 0.0
+        elif abs(raw_edge) > 0.30:
+            # Dampen medium-large edges when liquidity is poor
+            if not market.has_liquidity:
+                edge = edge * 0.3
         
         # Build reasoning string
         reasoning = self._build_reasoning(
@@ -179,8 +210,15 @@ class WeatherProbabilityModel:
         if std <= 0:
             std = 3.0  # Default uncertainty
         
+        # Apply continuity correction for integer-reported temperatures.
+        # Treat thresholds as boundaries between integer values.
+        if threshold_type.endswith("above"):
+            threshold_adj = threshold - 0.5
+        else:
+            threshold_adj = threshold + 0.5
+
         # Calculate z-score: how many std devs is threshold from forecast?
-        z = (threshold - forecast_temp) / std
+        z = (threshold_adj - forecast_temp) / std
         
         # Calculate probability using error function approximation
         # P(X > threshold) = 1 - Φ(z) for "above" events
@@ -223,13 +261,18 @@ class WeatherProbabilityModel:
         if std <= 0:
             std = 3.0
         
-        z_lower = (lower - forecast_temp) / std
-        z_upper = (upper - forecast_temp) / std
+        # Apply continuity correction for integer buckets.
+        # A bucket like 36-37 corresponds to [35.5, 37.5) in continuous space.
+        lower_adj = lower - 0.5
+        upper_adj = upper + 0.5
+
+        z_lower = (lower_adj - forecast_temp) / std
+        z_upper = (upper_adj - forecast_temp) / std
         
         # P(lower <= X < upper) = Φ(z_upper) - Φ(z_lower)
         prob = self._normal_cdf(z_upper) - self._normal_cdf(z_lower)
         
-        return max(0.0, min(1.0, prob))
+        return prob
     
     @staticmethod
     def _normal_cdf(z: float) -> float:
