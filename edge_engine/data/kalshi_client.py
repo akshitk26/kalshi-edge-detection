@@ -53,20 +53,21 @@ class KalshiMarket:
         yes_ask = data.get("yes_ask", 0) or 0
         last_price = data.get("last_price", 0) or 0
         
-        # Determine best price estimate:
-        # 1. If bid/ask both exist with reasonable spread, use midpoint
-        # 2. Otherwise use last_price (what actually traded)
-        # 3. Fall back to 50 if nothing available
-        has_liquidity = yes_bid > 0 and yes_ask > 0 and (yes_ask - yes_bid) <= 10
+        # Kalshi website shows "Chance" as last_price (the last traded price)
+        # This is the most accurate representation of market consensus
+        # has_liquidity indicates if there are active buyers/sellers
+        has_liquidity = yes_bid > 0 and yes_ask > 0 and (yes_ask - yes_bid) <= 15
         
-        if has_liquidity:
-            yes_price = (yes_bid + yes_ask) // 2
-        elif last_price > 0:
+        # Use last_price as primary (matches Kalshi website "Chance")
+        # Fall back to midpoint if no trades yet
+        if last_price > 0:
             yes_price = last_price
-        elif yes_bid > 0:
-            yes_price = yes_bid
+        elif has_liquidity:
+            yes_price = (yes_bid + yes_ask) // 2
         elif yes_ask > 0:
             yes_price = yes_ask
+        elif yes_bid > 0:
+            yes_price = yes_bid
         else:
             yes_price = 50  # Unknown, assume 50%
         
@@ -380,10 +381,21 @@ class KalshiClient:
             
             # Check question to determine direction
             question_lower = market.question.lower()
-            if "or above" in question_lower or "above" in question_lower:
+            # Check for "below" indicators: "or below", "below", "<"
+            is_below = ("or below" in question_lower or 
+                       "below" in question_lower or 
+                       f"<{raw_threshold}" in question_lower or
+                       f"< {raw_threshold}" in question_lower)
+            # Check for "above" indicators: "or above", "above", ">"  
+            is_above = ("or above" in question_lower or 
+                       "above" in question_lower or
+                       f">{raw_threshold}" in question_lower or
+                       f"> {raw_threshold}" in question_lower)
+            
+            if is_above and not is_below:
                 threshold = raw_threshold + 1  # T35 -> 36 or above
                 threshold_type = f"{high_low}_above"
-            elif "or below" in question_lower or "below" in question_lower:
+            elif is_below and not is_above:
                 threshold = raw_threshold  # T28 with "below" means 27 or below
                 threshold_type = f"{high_low}_below"
             else:
@@ -398,7 +410,14 @@ class KalshiClient:
                 "MIA": "Miami",
                 "SF": "San Francisco",
                 "DEN": "Denver",
-                "TCHI": "Chicago",  # KXLOWTCHI
+                "TCHI": "Chicago",
+                "ATL": "Atlanta",
+                "TATL": "Atlanta",
+                "DAL": "Dallas",
+                "HOU": "Houston",
+                "PHX": "Phoenix",
+                "PHL": "Philadelphia",
+                "BOS": "Boston",
             }
             
             return {
@@ -430,6 +449,13 @@ class KalshiClient:
                 "SF": "San Francisco",
                 "DEN": "Denver",
                 "TCHI": "Chicago",
+                "ATL": "Atlanta",
+                "TATL": "Atlanta",
+                "DAL": "Dallas",
+                "HOU": "Houston",
+                "PHX": "Phoenix",
+                "PHL": "Philadelphia",
+                "BOS": "Boston",
             }
             
             return {
