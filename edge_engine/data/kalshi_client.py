@@ -33,6 +33,8 @@ class KalshiMarket:
         close_time: When the market closes
         category: Market category (e.g., "weather")
         fetched_at: When this data was retrieved
+        volume: Trading volume
+        has_liquidity: Whether market has active bid/ask
     """
     market_id: str
     question: str
@@ -41,12 +43,32 @@ class KalshiMarket:
     close_time: datetime
     category: str
     fetched_at: datetime
+    volume: int = 0
+    has_liquidity: bool = True
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> "KalshiMarket":
         """Construct from Kalshi API response."""
-        # yes_bid is the current bid price, yes_ask is ask, last_price is last trade
-        yes_price = data.get("yes_bid") or data.get("yes_price") or data.get("last_price") or 50
+        yes_bid = data.get("yes_bid", 0) or 0
+        yes_ask = data.get("yes_ask", 0) or 0
+        last_price = data.get("last_price", 0) or 0
+        
+        # Determine best price estimate:
+        # 1. If bid/ask both exist with reasonable spread, use midpoint
+        # 2. Otherwise use last_price (what actually traded)
+        # 3. Fall back to 50 if nothing available
+        has_liquidity = yes_bid > 0 and yes_ask > 0 and (yes_ask - yes_bid) <= 10
+        
+        if has_liquidity:
+            yes_price = (yes_bid + yes_ask) // 2
+        elif last_price > 0:
+            yes_price = last_price
+        elif yes_bid > 0:
+            yes_price = yes_bid
+        elif yes_ask > 0:
+            yes_price = yes_ask
+        else:
+            yes_price = 50  # Unknown, assume 50%
         
         # Build question from title + subtitle
         title = data.get("title", "")
@@ -60,7 +82,9 @@ class KalshiMarket:
             market_prob=yes_price / 100.0,
             close_time=datetime.fromisoformat(data["close_time"].replace("Z", "+00:00")),
             category=data.get("category", "unknown"),
-            fetched_at=datetime.now(timezone.utc)
+            fetched_at=datetime.now(timezone.utc),
+            volume=data.get("volume", 0),
+            has_liquidity=has_liquidity
         )
 
 

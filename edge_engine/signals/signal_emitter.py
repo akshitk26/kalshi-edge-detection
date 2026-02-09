@@ -35,6 +35,9 @@ class Signal:
     edge: float
     confidence: float
     timestamp: str  # ISO-8601 format
+    market_url: str = ""  # Direct link to Kalshi market
+    has_liquidity: bool = True  # Whether market has active bid/ask
+    volume: int = 0  # Trading volume
     
     # Additional context (optional, for debugging/analysis)
     reasoning: str = ""
@@ -51,6 +54,12 @@ class Signal:
     @classmethod
     def from_edge_result(cls, result: EdgeResult) -> "Signal":
         """Create a Signal from an EdgeResult."""
+        # Generate direct Kalshi market link
+        # Extract series ticker (e.g., KXHIGHNY from KXHIGHNY-26FEB09-B30.5)
+        market_id = result.market.market_id
+        series_ticker = market_id.split("-")[0].lower() if "-" in market_id else market_id.lower()
+        market_url = f"https://kalshi.com/markets/{series_ticker}"
+        
         return cls(
             market_id=result.market.market_id,
             market_question=result.market.question,
@@ -59,6 +68,9 @@ class Signal:
             edge=round(result.edge, 4),
             confidence=round(result.confidence, 4),
             timestamp=datetime.now(timezone.utc).isoformat(),
+            market_url=market_url,
+            has_liquidity=getattr(result.market, 'has_liquidity', True),
+            volume=getattr(result.market, 'volume', 0),
             reasoning=result.reasoning,
             direction=result.direction
         )
@@ -143,7 +155,10 @@ class SignalEmitter:
         try:
             # Formatted console output
             print("\n" + "=" * 70)
-            print("🎯 EDGE DETECTED")
+            if not signal.has_liquidity:
+                print("⚠️  EDGE DETECTED (LOW LIQUIDITY - USE CAUTION)")
+            else:
+                print("🎯 EDGE DETECTED")
             print("=" * 70)
             print(f"Market:     {signal.market_id}")
             print(f"Question:   {signal.market_question}")
@@ -151,7 +166,9 @@ class SignalEmitter:
             print(f"Fair Prob:   {signal.fair_prob:.1%}")
             print(f"Edge:        {signal.edge:+.1%} ({signal.direction})")
             print(f"Confidence:  {signal.confidence:.1%}")
-            print(f"Timestamp:   {signal.timestamp}")
+            print(f"Volume:      {signal.volume:,}")
+            print(f"Liquidity:   {'Active' if signal.has_liquidity else 'LOW/STALE'}")
+            print(f"Link:        {signal.market_url}")
             print("-" * 70)
             print(f"Reasoning:   {signal.reasoning}")
             print("=" * 70 + "\n")

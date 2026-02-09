@@ -14,7 +14,7 @@ weather:
   base_url: "https://api.openweathermap.org/data/2.5"
   api_key: "8f7835e70cf9e664ef49adab419b4767"
   # Set via environment: OPENWEATHER_API_KEY
-  use_mock: false  # Your API key needs ~10 min to activate after signup
+  use_mock: true  # Set to false once API key activates (~2 hours after creation)
 
 # Edge detection parameters
 edge:
