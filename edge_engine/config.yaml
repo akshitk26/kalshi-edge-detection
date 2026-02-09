@@ -7,6 +7,8 @@ kalshi:
   base_url: "https://api.elections.kalshi.com/trade-api/v2"
   # Credentials loaded from environment: KALSHI_EMAIL, KALSHI_PASSWORD
   use_mock: false  # Set to true for testing without API
+  # Price source: last_price (Kalshi Chance), yes_ask (more current), mid (bid/ask mid)
+  price_source: "last_price"
 
 # Weather API settings (OpenWeatherMap)
 weather:

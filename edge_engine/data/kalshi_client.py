@@ -47,29 +47,30 @@ class KalshiMarket:
     has_liquidity: bool = True
 
     @classmethod
-    def from_api_response(cls, data: dict[str, Any]) -> "KalshiMarket":
+    def from_api_response(
+        cls,
+        data: dict[str, Any],
+        price_source: str = "last_price"
+    ) -> "KalshiMarket":
         """Construct from Kalshi API response."""
         yes_bid = data.get("yes_bid", 0) or 0
         yes_ask = data.get("yes_ask", 0) or 0
         last_price = data.get("last_price", 0) or 0
         
-        # Kalshi website shows "Chance" as last_price (the last traded price)
-        # This is the most accurate representation of market consensus
         # has_liquidity indicates if there are active buyers/sellers
         has_liquidity = yes_bid > 0 and yes_ask > 0 and (yes_ask - yes_bid) <= 15
         
-        # Use last_price as primary (matches Kalshi website "Chance")
-        # Fall back to midpoint if no trades yet
-        if last_price > 0:
-            yes_price = last_price
-        elif has_liquidity:
-            yes_price = (yes_bid + yes_ask) // 2
-        elif yes_ask > 0:
-            yes_price = yes_ask
-        elif yes_bid > 0:
-            yes_price = yes_bid
+        # Select price source for market probability
+        if price_source == "yes_ask":
+            yes_price = yes_ask or last_price or yes_bid or 50
+        elif price_source == "mid":
+            if yes_bid > 0 and yes_ask > 0:
+                yes_price = (yes_bid + yes_ask) // 2
+            else:
+                yes_price = last_price or yes_ask or yes_bid or 50
         else:
-            yes_price = 50  # Unknown, assume 50%
+            # Default to last_price (Kalshi site "Chance")
+            yes_price = last_price or yes_ask or yes_bid or 50
         
         # Build question from title + subtitle
         title = data.get("title", "")
@@ -105,8 +106,9 @@ class KalshiClient:
             config: Configuration dictionary with kalshi settings.
         """
         self.config = config.get("kalshi", {})
-        self.base_url = self.config.get("base_url", "https://trading-api.kalshi.com/trade-api/v2")
+        self.base_url = self.config.get("base_url", "https://api.elections.kalshi.com/trade-api/v2")
         self.use_mock = self.config.get("use_mock", True)
+        self.price_source = self.config.get("price_source", "last_price")
         
         # Auth credentials
         self.email = self.config.get("email") or os.getenv("KALSHI_EMAIL")
@@ -179,13 +181,13 @@ class KalshiClient:
             "KXHIGHPHX",    # Phoenix high
             "KXHIGHNOLA",   # New Orleans high
             "KXHIGHLV",     # Las Vegas high
-            "KXHIGHTMSP",   # Minneapolis high (note: T prefix)
+            "KXHIGHTMIN",   # Minneapolis high (note: T prefix)
             # Low temperature markets
             "KXLOWNY",      # NYC low
             "KXLOWTCHI",    # Chicago low
             "KXLOWDEN",     # Denver low
             "KXLOWTBOS",    # Boston low
-            "KXLOWTMSP",    # Minneapolis low
+            "KXLOWTMIN",    # Minneapolis low
         ]
         
         weather_markets = []
@@ -214,7 +216,7 @@ class KalshiClient:
             markets = []
             for market_data in data.get("markets", []):
                 try:
-                    markets.append(KalshiMarket.from_api_response(market_data))
+                    markets.append(KalshiMarket.from_api_response(market_data, self.price_source))
                 except (KeyError, ValueError) as e:
                     logger.debug(f"Skipping malformed market: {e}")
             
@@ -229,7 +231,7 @@ class KalshiClient:
             markets = []
             for market_data in data.get("markets", []):
                 try:
-                    markets.append(KalshiMarket.from_api_response(market_data))
+                    markets.append(KalshiMarket.from_api_response(market_data, self.price_source))
                 except (KeyError, ValueError) as e:
                     logger.debug(f"Skipping malformed market: {e}")
             
@@ -261,7 +263,7 @@ class KalshiClient:
             response = self._session.get(f"{self.base_url}/markets/{market_id}")
             response.raise_for_status()
             data = response.json()
-            return KalshiMarket.from_api_response(data["market"])
+            return KalshiMarket.from_api_response(data["market"], self.price_source)
         except requests.RequestException as e:
             logger.error(f"Failed to fetch market {market_id}: {e}")
             return None
@@ -279,7 +281,7 @@ class KalshiClient:
             markets = []
             for market_data in data.get("markets", []):
                 try:
-                    markets.append(KalshiMarket.from_api_response(market_data))
+                    markets.append(KalshiMarket.from_api_response(market_data, self.price_source))
                 except (KeyError, ValueError) as e:
                     logger.warning(f"Skipping malformed market data: {e}")
             
@@ -383,7 +385,7 @@ class KalshiClient:
         """
         # Pattern for threshold markets: KXHIGH{CITY}-DATE-T{TEMP}
         # The T value is 1 less than actual threshold (T35 means "36 or above")
-        threshold_pattern = r"KX(HIGH|LOW)([A-Z]{2,4})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
+        threshold_pattern = r"KX(HIGH|LOW)([A-Z]{2,5})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
         match = re.match(threshold_pattern, market.market_id)
         
         if match:
@@ -421,8 +423,12 @@ class KalshiClient:
                 "LA": "Los Angeles",
                 "CHI": "Chicago",
                 "MIA": "Miami",
+                "TMIA": "Miami",
                 "SF": "San Francisco",
+                "SEA": "Seattle",
+                "TSEA": "Seattle",
                 "DEN": "Denver",
+                "TDEN": "Denver",
                 "TCHI": "Chicago",
                 "ATL": "Atlanta",
                 "TATL": "Atlanta",
@@ -430,14 +436,19 @@ class KalshiClient:
                 "HOU": "Houston",
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
+                "PHIL": "Philadelphia",
+                "TPHIL": "Philadelphia",
                 "BOS": "Boston",
                 "TBOS": "Boston",
                 "NOLA": "New Orleans",
+                "TNOLA": "New Orleans",
                 "LV": "Las Vegas",
+                "TLV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
-                "TMSP": "Minneapolis",
+                "TMIN": "Minneapolis",
                 "MIN": "Minneapolis",
+                "TLAX": "Los Angeles",
             }
             
             return {
@@ -449,7 +460,7 @@ class KalshiClient:
         
         # Pattern for bucket markets: KXHIGH{CITY}-DATE-B{TEMP}
         # B30.5 means "30 to 31" range
-        bucket_pattern = r"KX(HIGH|LOW)([A-Z]{2,4})-\d{2}[A-Z]{3}\d{2}-B([\d.]+)"
+        bucket_pattern = r"KX(HIGH|LOW)([A-Z]{2,5})-\d{2}[A-Z]{3}\d{2}-B([\d.]+)"
         match = re.match(bucket_pattern, market.market_id)
         
         if match:
@@ -466,8 +477,12 @@ class KalshiClient:
                 "LA": "Los Angeles",
                 "CHI": "Chicago",
                 "MIA": "Miami",
+                "TMIA": "Miami",
                 "SF": "San Francisco",
+                "SEA": "Seattle",
+                "TSEA": "Seattle",
                 "DEN": "Denver",
+                "TDEN": "Denver",
                 "TCHI": "Chicago",
                 "ATL": "Atlanta",
                 "TATL": "Atlanta",
@@ -475,14 +490,19 @@ class KalshiClient:
                 "HOU": "Houston",
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
+                "PHIL": "Philadelphia",
+                "TPHIL": "Philadelphia",
                 "BOS": "Boston",
                 "TBOS": "Boston",
                 "NOLA": "New Orleans",
+                "TNOLA": "New Orleans",
                 "LV": "Las Vegas",
+                "TLV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
-                "TMSP": "Minneapolis",
+                "TMIN": "Minneapolis",
                 "MIN": "Minneapolis",
+                "TLAX": "Los Angeles",
             }
             
             return {
@@ -495,7 +515,7 @@ class KalshiClient:
             }
         
         # Fallback: try old pattern for mock data compatibility
-        old_pattern = r"(HIGH|LOW)([A-Z]{2,3})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
+        old_pattern = r"(HIGH|LOW)([A-Z]{2,5})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
         match = re.match(old_pattern, market.market_id)
         
         if match:
@@ -508,8 +528,12 @@ class KalshiClient:
                 "LA": "Los Angeles",
                 "CHI": "Chicago",
                 "MIA": "Miami",
+                "TMIA": "Miami",
                 "SF": "San Francisco",
+                "SEA": "Seattle",
+                "TSEA": "Seattle",
                 "DEN": "Denver",
+                "TDEN": "Denver",
                 "TCHI": "Chicago",
                 "ATL": "Atlanta",
                 "TATL": "Atlanta",
@@ -517,14 +541,20 @@ class KalshiClient:
                 "HOU": "Houston",
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
+                "PHIL": "Philadelphia",
+                "TPHIL": "Philadelphia",
                 "BOS": "Boston",
                 "TBOS": "Boston",
                 "NOLA": "New Orleans",
+                "TNOLA": "New Orleans",
                 "LV": "Las Vegas",
+                "TLV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
-                "TMSP": "Minneapolis",
+                "TMIN": "Minneapolis",
                 "MIN": "Minneapolis",
+                "LAX": "Los Angeles",
+                "TLAX": "Los Angeles",
             }
             
             if "below" in market.question.lower():

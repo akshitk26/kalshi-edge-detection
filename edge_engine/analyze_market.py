@@ -6,6 +6,9 @@ Usage:
     python3 -m edge_engine.analyze_market "https://kalshi.com/markets/kxhightatl/atlanta-max-temperature/kxhightatl-26feb09"
     python3 -m edge_engine.analyze_market KXHIGHTATL-26FEB09-T40
     python3 -m edge_engine.analyze_market kxhighny  # Analyze all markets in series
+
+Note: The Kalshi REST API can lag 5-15 minutes behind the website.
+    The price source is configurable via kalshi.price_source.
 """
 
 import re
@@ -80,7 +83,7 @@ def fetch_series_markets(client: KalshiClient, series_ticker: str) -> list:
         markets = []
         for market_data in data.get("markets", []):
             try:
-                markets.append(KalshiMarket.from_api_response(market_data))
+                markets.append(KalshiMarket.from_api_response(market_data, client.price_source))
             except Exception:
                 pass
         return markets
@@ -97,7 +100,7 @@ def fetch_single_market(client: KalshiClient, market_ticker: str):
         data = response.json()
         
         from edge_engine.data.kalshi_client import KalshiMarket
-        return KalshiMarket.from_api_response(data["market"])
+        return KalshiMarket.from_api_response(data["market"], client.price_source)
     except Exception as e:
         print(f"Error fetching market {market_ticker}: {e}")
         return None
@@ -196,6 +199,10 @@ def main():
         sys.exit(1)
     
     print(f"📈 Found {len(markets)} market(s)")
+    print(
+        f"⚠️  Note: Kalshi API may lag 5-15 min behind website. "
+        f"Price source: {kalshi_client.price_source}."
+    )
     
     # Analyze each market
     results = []
