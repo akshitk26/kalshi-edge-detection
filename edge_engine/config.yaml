@@ -3,15 +3,18 @@
 
 # Kalshi API settings
 kalshi:
-  base_url: "https://trading-api.kalshi.com/trade-api/v2"
-  # Set via environment: KALSHI_API_KEY
-  use_mock: true  # Set to false when using real API
+  base_url: "https://api.elections.kalshi.com/trade-api/v2"
+  # Authentication - use your Kalshi account credentials
+  email: "akshit2k26@gmail.com"      # Your Kalshi login email (or set KALSHI_EMAIL env var)
+  password: "Kalshifalcon@467"   # Your Kalshi login password (or set KALSHI_PASSWORD env var)
+  use_mock: false  # Using real Kalshi API
 
 # Weather API settings (OpenWeatherMap)
 weather:
   base_url: "https://api.openweathermap.org/data/2.5"
+  api_key: "8f7835e70cf9e664ef49adab419b4767"
   # Set via environment: OPENWEATHER_API_KEY
-  use_mock: true  # Set to false when using real API
+  use_mock: false  # Your API key needs ~10 min to activate after signup
 
 # Edge detection parameters
 edge:

@@ -99,8 +99,8 @@ class WeatherProbabilityModel:
             return None
         
         location = params["location"]
-        threshold = params["threshold_temp"]
         threshold_type = params["threshold_type"]
+        is_bucket = params.get("is_bucket", False)
         
         # Fetch weather data
         weather = self.weather_client.get_forecast(location, market.close_time)
@@ -109,7 +109,16 @@ class WeatherProbabilityModel:
             return None
         
         # Calculate fair probability
-        fair_prob = self._calculate_probability(weather, threshold, threshold_type)
+        if is_bucket:
+            # Bucket market: P(lower <= temp < upper)
+            lower = params["lower_bound"]
+            upper = params["upper_bound"]
+            fair_prob = self._calculate_bucket_probability(weather, lower, upper, threshold_type)
+            threshold = params["threshold_temp"]  # midpoint for display
+        else:
+            # Threshold market: P(temp > threshold) or P(temp < threshold)
+            threshold = params["threshold_temp"]
+            fair_prob = self._calculate_probability(weather, threshold, threshold_type)
         
         # Calculate edge
         edge = fair_prob - market.market_prob
@@ -119,7 +128,10 @@ class WeatherProbabilityModel:
         
         # Build reasoning string
         reasoning = self._build_reasoning(
-            weather, threshold, threshold_type, fair_prob, market.market_prob
+            weather, threshold, threshold_type, fair_prob, market.market_prob,
+            is_bucket=is_bucket,
+            lower=params.get("lower_bound"),
+            upper=params.get("upper_bound")
         )
         
         logger.debug(
@@ -180,6 +192,45 @@ class WeatherProbabilityModel:
         else:  # below
             return 1 - prob_above
     
+    def _calculate_bucket_probability(
+        self,
+        weather: WeatherData,
+        lower: float,
+        upper: float,
+        threshold_type: str
+    ) -> float:
+        """
+        Calculate probability of temperature falling within a bucket range.
+        
+        P(lower <= temp < upper) = Φ(z_upper) - Φ(z_lower)
+        
+        Args:
+            weather: Weather forecast data
+            lower: Lower bound of bucket (Fahrenheit)
+            upper: Upper bound of bucket (Fahrenheit)
+            threshold_type: Starts with "high" or "low"
+        
+        Returns:
+            Probability (0-1) of temperature in range
+        """
+        if threshold_type.startswith("high"):
+            forecast_temp = weather.high_temp_f
+            std = weather.high_temp_std
+        else:
+            forecast_temp = weather.low_temp_f
+            std = weather.low_temp_std
+        
+        if std <= 0:
+            std = 3.0
+        
+        z_lower = (lower - forecast_temp) / std
+        z_upper = (upper - forecast_temp) / std
+        
+        # P(lower <= X < upper) = Φ(z_upper) - Φ(z_lower)
+        prob = self._normal_cdf(z_upper) - self._normal_cdf(z_lower)
+        
+        return max(0.0, min(1.0, prob))
+    
     @staticmethod
     def _normal_cdf(z: float) -> float:
         """
@@ -232,7 +283,10 @@ class WeatherProbabilityModel:
         threshold: float,
         threshold_type: str,
         fair_prob: float,
-        market_prob: float
+        market_prob: float,
+        is_bucket: bool = False,
+        lower: float | None = None,
+        upper: float | None = None
     ) -> str:
         """Build human-readable reasoning for the calculation."""
         if threshold_type.startswith("high"):
@@ -244,8 +298,6 @@ class WeatherProbabilityModel:
             forecast = weather.low_temp_f
             std = weather.low_temp_std
         
-        direction = "above" if threshold_type.endswith("above") else "below"
-        
         edge = fair_prob - market_prob
         edge_assessment = (
             f"Market {'underprices' if edge > 0 else 'overprices'} YES by {abs(edge):.1%}"
@@ -253,8 +305,16 @@ class WeatherProbabilityModel:
             else "Market is fairly priced"
         )
         
-        return (
-            f"Forecast {temp_type}: {forecast:.1f}°F ± {std:.1f}°F | "
-            f"P({temp_type} {direction} {threshold}°F) = {fair_prob:.1%} | "
-            f"Market: {market_prob:.1%} | {edge_assessment}"
-        )
+        if is_bucket and lower is not None and upper is not None:
+            return (
+                f"Forecast {temp_type}: {forecast:.0f}°F ± {std:.1f}°F | "
+                f"P({lower:.0f}° ≤ {temp_type} < {upper:.0f}°) = {fair_prob:.1%} | "
+                f"Market: {market_prob:.1%} | {edge_assessment}"
+            )
+        else:
+            direction = "above" if threshold_type.endswith("above") else "below"
+            return (
+                f"Forecast {temp_type}: {forecast:.0f}°F ± {std:.1f}°F | "
+                f"P({temp_type} {direction} {threshold:.0f}°F) = {fair_prob:.1%} | "
+                f"Market: {market_prob:.1%} | {edge_assessment}"
+            )

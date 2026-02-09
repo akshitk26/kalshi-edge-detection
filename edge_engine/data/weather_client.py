@@ -204,43 +204,43 @@ class WeatherClient:
         if target_date is None:
             target_date = now.replace(hour=12, minute=0, second=0, microsecond=0)
         
-        # Mock forecasts with realistic winter values
-        # These are designed to create interesting edge detection scenarios
+        # Mock forecasts with realistic February 2026 values
+        # Based on typical winter temperatures for each city
+        # These should roughly align with Kalshi market expectations
         mock_forecasts = {
             "New York": {
-                "high": 52.0,  # Will create edge for HIGHNY-T50 (market: 78%, model will say higher)
-                              # Will create edge for HIGHNY-T55 (market: 62%, model will say lower)
-                "low": 38.0,
-                "high_std": 3.5,
-                "low_std": 3.0
+                "high": 31.0,  # Cold February day in NYC
+                "low": 22.0,
+                "high_std": 3.0,
+                "low_std": 2.5
             },
             "Los Angeles": {
-                "high": 68.0,  # Close to 70°F threshold, interesting probability
-                "low": 52.0,
+                "high": 72.0,  # Mild LA winter
+                "low": 54.0,
                 "high_std": 2.5,
                 "low_std": 2.0
             },
             "Chicago": {
-                "high": 32.0,  # Well below 40°F threshold
-                "low": 22.0,
+                "high": 28.0,  # Cold Chicago February
+                "low": 18.0,
                 "high_std": 4.0,
                 "low_std": 3.5
             },
             "Miami": {
-                "high": 78.0,
-                "low": 65.0,
+                "high": 79.0,
+                "low": 68.0,
                 "high_std": 2.0,
                 "low_std": 2.0
             },
-            "Seattle": {
-                "high": 48.0,
-                "low": 38.0,
-                "high_std": 3.0,
-                "low_std": 2.5
+            "San Francisco": {
+                "high": 58.0,
+                "low": 48.0,
+                "high_std": 2.5,
+                "low_std": 2.0
             },
             "Denver": {
-                "high": 45.0,
-                "low": 28.0,
+                "high": 42.0,
+                "low": 24.0,
                 "high_std": 5.0,  # Mountain weather is more variable
                 "low_std": 4.5
             }

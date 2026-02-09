@@ -45,10 +45,17 @@ class KalshiMarket:
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> "KalshiMarket":
         """Construct from Kalshi API response."""
-        yes_price = data.get("yes_price", data.get("last_price", 50))
+        # yes_bid is the current bid price, yes_ask is ask, last_price is last trade
+        yes_price = data.get("yes_bid") or data.get("yes_price") or data.get("last_price") or 50
+        
+        # Build question from title + subtitle
+        title = data.get("title", "")
+        subtitle = data.get("subtitle", "")
+        question = f"{title}: {subtitle}" if subtitle else title
+        
         return cls(
             market_id=data["ticker"],
-            question=data.get("title", data.get("subtitle", "")),
+            question=question,
             yes_price=yes_price,
             market_prob=yes_price / 100.0,
             close_time=datetime.fromisoformat(data["close_time"].replace("Z", "+00:00")),
@@ -62,6 +69,7 @@ class KalshiClient:
     Client for fetching Kalshi market data.
     
     Supports both live API and mock mode for development.
+    Kalshi requires email/password login to get an access token.
     """
     
     def __init__(self, config: dict[str, Any]):
@@ -74,16 +82,54 @@ class KalshiClient:
         self.config = config.get("kalshi", {})
         self.base_url = self.config.get("base_url", "https://trading-api.kalshi.com/trade-api/v2")
         self.use_mock = self.config.get("use_mock", True)
+        
+        # Auth credentials
+        self.email = self.config.get("email") or os.getenv("KALSHI_EMAIL")
+        self.password = self.config.get("password") or os.getenv("KALSHI_PASSWORD")
         self.api_key = self.config.get("api_key") or os.getenv("KALSHI_API_KEY")
         
         # Session for connection pooling
         self._session = requests.Session()
-        if self.api_key:
-            self._session.headers.update({"Authorization": f"Bearer {self.api_key}"})
+        self._token: str | None = None
+        self._authenticated = False
+    
+    def _authenticate(self) -> bool:
+        """
+        Authenticate with Kalshi API.
+        
+        Returns:
+            True if authentication succeeded.
+        """
+        if self._authenticated and self._token:
+            return True
+        
+        if not self.email or not self.password:
+            logger.warning("Kalshi email/password not configured - using mock data")
+            return False
+        
+        try:
+            response = self._session.post(
+                f"{self.base_url}/login",
+                json={"email": self.email, "password": self.password}
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            self._token = data.get("token")
+            if self._token:
+                self._session.headers.update({"Authorization": f"Bearer {self._token}"})
+                self._authenticated = True
+                logger.info("Successfully authenticated with Kalshi")
+                return True
+            
+        except requests.RequestException as e:
+            logger.error(f"Kalshi authentication failed: {e}")
+        
+        return False
     
     def get_weather_markets(self) -> list[KalshiMarket]:
         """
-        Fetch weather-related markets.
+        Fetch weather-related markets (daily temperature).
         
         Returns:
             List of KalshiMarket objects for weather prediction markets.
@@ -91,7 +137,70 @@ class KalshiClient:
         if self.use_mock:
             return self._get_mock_weather_markets()
         
-        return self._fetch_markets_by_category("weather")
+        # Temperature series on Kalshi
+        # Format: KXHIGH{CITY} for high temps, KXLOW{CITY} for low temps
+        temp_series = [
+            "KXHIGHNY",   # NYC high
+            "KXHIGHLAX",  # LA high  
+            "KXHIGHCHI",  # Chicago high
+            "KXHIGHMIA",  # Miami high
+            "KXHIGHSF",   # San Francisco high
+            "KXLOWNY",    # NYC low
+            "KXLOWTCHI",  # Chicago low
+            "KXLOWDEN",   # Denver low
+        ]
+        
+        weather_markets = []
+        
+        for series_ticker in temp_series:
+            markets = self._fetch_markets_by_series(series_ticker)
+            weather_markets.extend(markets)
+        
+        if not weather_markets:
+            logger.warning("No weather markets found on Kalshi, using mock data")
+            return self._get_mock_weather_markets()
+        
+        logger.info(f"Found {len(weather_markets)} temperature markets")
+        return weather_markets
+    
+    def _fetch_markets_by_series(self, series_ticker: str) -> list[KalshiMarket]:
+        """Fetch all open markets for a series."""
+        try:
+            response = self._session.get(
+                f"{self.base_url}/markets",
+                params={"series_ticker": series_ticker, "status": "open", "limit": 50}
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            markets = []
+            for market_data in data.get("markets", []):
+                try:
+                    markets.append(KalshiMarket.from_api_response(market_data))
+                except (KeyError, ValueError) as e:
+                    logger.debug(f"Skipping malformed market: {e}")
+            
+            return markets
+            
+        except requests.RequestException as e:
+            logger.debug(f"Failed to fetch series {series_ticker}: {e}")
+            return []
+            response.raise_for_status()
+            data = response.json()
+            
+            markets = []
+            for market_data in data.get("markets", []):
+                try:
+                    markets.append(KalshiMarket.from_api_response(market_data))
+                except (KeyError, ValueError) as e:
+                    logger.debug(f"Skipping malformed market: {e}")
+            
+            return markets
+            
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch markets: {e}")
+            return []
+
     
     def get_market(self, market_id: str) -> KalshiMarket | None:
         """
@@ -222,43 +331,119 @@ class KalshiClient:
         Extract structured parameters from a weather market.
         
         Parses market_id and question to extract:
-        - location: City code (NYC, LA, etc.)
+        - location: City name
         - threshold_temp: Temperature threshold in Fahrenheit
         - threshold_type: "high_above", "high_below", "low_above", "low_below"
+        - is_bucket: True if this is a range bucket (e.g., "30° to 31°")
+        
+        Kalshi ticker formats:
+        - KXHIGHNY-26FEB09-T35 = NYC high >= 36°F (threshold)
+        - KXHIGHNY-26FEB09-B30.5 = NYC high in 30-31°F range (bucket)
+        - KXLOWDEN-26FEB09-T20 = Denver low >= 21°F
         
         Returns None if parsing fails.
         """
-        # Pattern: HIGHNY-26FEB09-T55 or LOWCHI-26FEB09-T40
-        pattern = r"(HIGH|LOW)([A-Z]{2,3})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
-        match = re.match(pattern, market.market_id)
+        # Pattern for threshold markets: KXHIGH{CITY}-DATE-T{TEMP}
+        # The T value is 1 less than actual threshold (T35 means "36 or above")
+        threshold_pattern = r"KX(HIGH|LOW)([A-Z]{2,4})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
+        match = re.match(threshold_pattern, market.market_id)
         
-        if not match:
-            logger.debug(f"Could not parse market ID: {market.market_id}")
-            return None
+        if match:
+            high_low = match.group(1).lower()
+            city_code = match.group(2)
+            # T35 means "36 or above", so add 1
+            raw_threshold = int(match.group(3))
+            
+            # Check question to determine direction
+            question_lower = market.question.lower()
+            if "or above" in question_lower or "above" in question_lower:
+                threshold = raw_threshold + 1  # T35 -> 36 or above
+                threshold_type = f"{high_low}_above"
+            elif "or below" in question_lower or "below" in question_lower:
+                threshold = raw_threshold  # T28 with "below" means 27 or below
+                threshold_type = f"{high_low}_below"
+            else:
+                threshold = raw_threshold + 1
+                threshold_type = f"{high_low}_above"
+            
+            city_map = {
+                "NY": "New York",
+                "LAX": "Los Angeles",
+                "LA": "Los Angeles",
+                "CHI": "Chicago",
+                "MIA": "Miami",
+                "SF": "San Francisco",
+                "DEN": "Denver",
+                "TCHI": "Chicago",  # KXLOWTCHI
+            }
+            
+            return {
+                "location": city_map.get(city_code, city_code),
+                "threshold_temp": threshold,
+                "threshold_type": threshold_type,
+                "is_bucket": False
+            }
         
-        high_low = match.group(1).lower()
-        city_code = match.group(2)
-        threshold = int(match.group(3))
+        # Pattern for bucket markets: KXHIGH{CITY}-DATE-B{TEMP}
+        # B30.5 means "30 to 31" range
+        bucket_pattern = r"KX(HIGH|LOW)([A-Z]{2,4})-\d{2}[A-Z]{3}\d{2}-B([\d.]+)"
+        match = re.match(bucket_pattern, market.market_id)
         
-        # Map city codes to full names for weather API
-        city_map = {
-            "NY": "New York",
-            "LA": "Los Angeles", 
-            "CHI": "Chicago",
-            "MIA": "Miami",
-            "SEA": "Seattle",
-            "DEN": "Denver"
-        }
+        if match:
+            high_low = match.group(1).lower()
+            city_code = match.group(2)
+            bucket_mid = float(match.group(3))
+            # B30.5 means range 30-31, so lower bound is floor
+            lower_bound = int(bucket_mid)
+            upper_bound = lower_bound + 1
+            
+            city_map = {
+                "NY": "New York",
+                "LAX": "Los Angeles", 
+                "LA": "Los Angeles",
+                "CHI": "Chicago",
+                "MIA": "Miami",
+                "SF": "San Francisco",
+                "DEN": "Denver",
+                "TCHI": "Chicago",
+            }
+            
+            return {
+                "location": city_map.get(city_code, city_code),
+                "threshold_temp": (lower_bound + upper_bound) / 2,  # midpoint
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound,
+                "threshold_type": f"{high_low}_bucket",
+                "is_bucket": True
+            }
         
-        # Determine threshold type from question context
-        # Most Kalshi weather markets are "above X" for highs
-        if "below" in market.question.lower():
-            threshold_type = f"{high_low}_below"
-        else:
-            threshold_type = f"{high_low}_above"
+        # Fallback: try old pattern for mock data compatibility
+        old_pattern = r"(HIGH|LOW)([A-Z]{2,3})-\d{2}[A-Z]{3}\d{2}-T(\d+)"
+        match = re.match(old_pattern, market.market_id)
         
-        return {
-            "location": city_map.get(city_code, city_code),
-            "threshold_temp": threshold,
-            "threshold_type": threshold_type
-        }
+        if match:
+            high_low = match.group(1).lower()
+            city_code = match.group(2)
+            threshold = int(match.group(3))
+            
+            city_map = {
+                "NY": "New York",
+                "LA": "Los Angeles",
+                "CHI": "Chicago",
+                "MIA": "Miami",
+            }
+            
+            if "below" in market.question.lower():
+                threshold_type = f"{high_low}_below"
+            else:
+                threshold_type = f"{high_low}_above"
+            
+            return {
+                "location": city_map.get(city_code, city_code),
+                "threshold_temp": threshold,
+                "threshold_type": threshold_type,
+                "is_bucket": False
+            }
+        
+        logger.debug(f"Could not parse market ID: {market.market_id}")
+        return None
