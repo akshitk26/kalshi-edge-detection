@@ -6,6 +6,15 @@ from typing import Any
 
 import yaml
 
+# Load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass  # dotenv not installed, rely on system env vars
+
 
 def load_config(config_path: str | None = None) -> dict[str, Any]:
     """
@@ -24,8 +33,11 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
         config = yaml.safe_load(f)
     
     # Override with environment variables where applicable
-    if os.getenv("KALSHI_API_KEY"):
-        config.setdefault("kalshi", {})["api_key"] = os.getenv("KALSHI_API_KEY")
+    if os.getenv("KALSHI_EMAIL"):
+        config.setdefault("kalshi", {})["email"] = os.getenv("KALSHI_EMAIL")
+    
+    if os.getenv("KALSHI_PASSWORD"):
+        config.setdefault("kalshi", {})["password"] = os.getenv("KALSHI_PASSWORD")
     
     if os.getenv("OPENWEATHER_API_KEY"):
         config.setdefault("weather", {})["api_key"] = os.getenv("OPENWEATHER_API_KEY")

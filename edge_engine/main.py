@@ -132,6 +132,7 @@ class EdgeEngine:
         
         # 2. Evaluate each market for edge
         signals_emitted = []
+        all_results = []  # Collect all results for summary table
         edges_found = 0
         
         for market in markets[:self.markets_per_cycle]:
@@ -139,6 +140,8 @@ class EdgeEngine:
             result = self.probability_model.evaluate_market(market)
             if result is None:
                 continue
+            
+            all_results.append(result)
             
             # Log all evaluations at DEBUG level
             self.logger.debug(
@@ -159,6 +162,9 @@ class EdgeEngine:
                 if self.signal_emitter.emit(signal):
                     signals_emitted.append(signal.to_dict())
         
+        # Print summary table
+        self._print_summary_table(all_results)
+        
         # Cycle summary
         cycle_duration = (datetime.now(timezone.utc) - cycle_start).total_seconds()
         self.logger.info(
@@ -168,6 +174,51 @@ class EdgeEngine:
         )
         
         return signals_emitted
+    
+    def _print_summary_table(self, results: list) -> None:
+        """Print a summary table of all evaluated markets with edges."""
+        # Filter to only markets with edge >= threshold
+        edge_results = [r for r in results if abs(r.edge) >= self.edge_threshold]
+        
+        if not edge_results:
+            print("\n No edges found above threshold.\n")
+            return
+        
+        # Sort by absolute edge (biggest opportunities first)
+        edge_results.sort(key=lambda r: abs(r.edge), reverse=True)
+        
+        # Print table header
+        print("\n" + "=" * 100)
+        print("📊 EDGE SUMMARY TABLE")
+        print("=" * 100)
+        print(f"{'Market':<28} | {'Question':<25} | {'Mkt':>5} | {'Fair':>5} | {'Edge':>7} | {'Action':<8} | {'Liq':<4}")
+        print("-" * 100)
+        
+        for r in edge_results:
+            # Truncate market ID and question for display
+            market_id = r.market.market_id[:27] if len(r.market.market_id) > 27 else r.market.market_id
+            
+            # Extract short question (just the temperature part)
+            q = r.market.question
+            if ":" in q:
+                q = q.split(":")[1].strip()[:24]
+            else:
+                q = q[:24]
+            
+            # Determine action
+            if r.edge > 0:
+                action = "BUY YES"
+            else:
+                action = "BUY NO"
+            
+            # Liquidity indicator
+            liq = "✓" if getattr(r.market, 'has_liquidity', True) else "⚠"
+            
+            print(f"{market_id:<28} | {q:<25} | {r.market_prob:>4.0%} | {r.fair_prob:>4.0%} | {r.edge:>+6.1%} | {action:<8} | {liq:<4}")
+        
+        print("=" * 100)
+        print(f"Total: {len(edge_results)} opportunities found")
+        print("=" * 100 + "\n")
     
     def _shutdown(self) -> None:
         """Clean shutdown procedure."""
