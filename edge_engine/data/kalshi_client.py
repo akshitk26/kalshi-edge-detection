@@ -164,27 +164,28 @@ class KalshiClient:
         
         # Temperature series on Kalshi
         # Format: KXHIGH{CITY} for high temps, KXLOW{CITY} for low temps
+        # Note: Some cities have a T prefix (e.g., KXHIGHTBOS, KXHIGHTATL)
         temp_series = [
             # High temperature markets
-            "KXHIGHNY",    # NYC high
-            "KXHIGHLAX",   # LA high  
-            "KXHIGHCHI",   # Chicago high
-            "KXHIGHMIA",   # Miami high
-            "KXHIGHSF",    # San Francisco high
-            "KXHIGHDEN",   # Denver high
-            "KXHIGHBOS",   # Boston high
-            "KXHIGHPHL",   # Philadelphia high
-            "KXHIGHATL",   # Atlanta high
-            "KXHIGHPHX",   # Phoenix high
-            "KXHIGHNOLA",  # New Orleans high
-            "KXHIGHLV",    # Las Vegas high
-            "KXHIGHMIN",   # Minneapolis high
+            "KXHIGHNY",     # NYC high
+            "KXHIGHLAX",    # LA high  
+            "KXHIGHCHI",    # Chicago high
+            "KXHIGHMIA",    # Miami high
+            "KXHIGHSF",     # San Francisco high
+            "KXHIGHDEN",    # Denver high
+            "KXHIGHTBOS",   # Boston high (note: T prefix)
+            "KXHIGHPHL",    # Philadelphia high
+            "KXHIGHTATL",   # Atlanta high (note: T prefix)
+            "KXHIGHPHX",    # Phoenix high
+            "KXHIGHNOLA",   # New Orleans high
+            "KXHIGHLV",     # Las Vegas high
+            "KXHIGHTMSP",   # Minneapolis high (note: T prefix)
             # Low temperature markets
-            "KXLOWNY",     # NYC low
-            "KXLOWTCHI",   # Chicago low
-            "KXLOWDEN",    # Denver low
-            "KXLOWBOS",    # Boston low
-            "KXLOWMIN",    # Minneapolis low
+            "KXLOWNY",      # NYC low
+            "KXLOWTCHI",    # Chicago low
+            "KXLOWDEN",     # Denver low
+            "KXLOWTBOS",    # Boston low
+            "KXLOWTMSP",    # Minneapolis low
         ]
         
         weather_markets = []
@@ -430,10 +431,12 @@ class KalshiClient:
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
                 "BOS": "Boston",
+                "TBOS": "Boston",
                 "NOLA": "New Orleans",
                 "LV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
+                "TMSP": "Minneapolis",
                 "MIN": "Minneapolis",
             }
             
@@ -473,10 +476,12 @@ class KalshiClient:
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
                 "BOS": "Boston",
+                "TBOS": "Boston",
                 "NOLA": "New Orleans",
                 "LV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
+                "TMSP": "Minneapolis",
                 "MIN": "Minneapolis",
             }
             
@@ -505,16 +510,20 @@ class KalshiClient:
                 "MIA": "Miami",
                 "SF": "San Francisco",
                 "DEN": "Denver",
+                "TCHI": "Chicago",
                 "ATL": "Atlanta",
+                "TATL": "Atlanta",
                 "DAL": "Dallas",
                 "HOU": "Houston",
                 "PHX": "Phoenix",
                 "PHL": "Philadelphia",
                 "BOS": "Boston",
+                "TBOS": "Boston",
                 "NOLA": "New Orleans",
                 "LV": "Las Vegas",
                 "VEG": "Las Vegas",
                 "MSP": "Minneapolis",
+                "TMSP": "Minneapolis",
                 "MIN": "Minneapolis",
             }
             
