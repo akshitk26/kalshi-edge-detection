@@ -1,19 +1,33 @@
 """
-Weather Probability Model
+Weather Probability Model — Discrete Reported Temperature
 
-Computes fair probabilities for weather prediction markets using:
-1. Weather forecast data (point estimate)
-2. Forecast uncertainty (standard deviation)
-3. Normal distribution assumption for temperature
+Kalshi temperature markets settle on the integer value from the
+NWS Climatological Report (Daily). This is a DISCRETE outcome
+measured at a specific station, not a continuous forecast model output.
 
-The model is intentionally simple and explainable:
-- Given a forecast of X°F ± σ°F
-- Compute P(temp > threshold) using the normal CDF
+Two-component uncertainty model:
 
-This is a reasonable first-order approximation. Real improvements would include:
-- Ensemble model data
-- Historical forecast accuracy calibration
-- Skewness in temperature distributions
+    σ²_effective = σ²_forecast + σ²_reporting
+
+  • σ_forecast: Weather model's uncertainty about the atmospheric temp.
+    This is what APIs return (typically 1–3°F depending on horizon).
+
+  • σ_reporting: "Representation error" — the gap between the forecast
+    model's grid-point temperature and what the NWS station actually
+    reports. Captures:
+      – Station vs. grid-point mismatch
+      – Max-of-day aggregation (daily high ≠ single model snapshot)
+      – Microclimate / marine layer effects (coastal cities)
+      – NWS rounding / reporting conventions
+      – Station-specific biases and integer stickiness
+    City-specific; typically 1.0–2.5°F, higher for coastal stations.
+
+From the effective distribution T ~ N(μ, σ²_eff) we derive a discrete
+PMF over integer reported temperatures:
+
+    P(reported = k) = Φ((k+0.5−μ)/σ_eff) − Φ((k−0.5−μ)/σ_eff)
+
+This correctly models both bucket and threshold markets.
 """
 
 from dataclasses import dataclass
@@ -62,11 +76,47 @@ class WeatherProbabilityModel:
     """
     Computes fair probabilities for weather prediction markets.
     
-    Uses weather forecast data and assumes normally distributed
-    temperature outcomes to compute P(temp > threshold).
+    Models the distribution of NWS-reported integer temperatures using
+    a two-component σ (forecast uncertainty + station reporting noise),
+    then derives a discrete PMF over integers.
     """
     
-    def __init__(self, weather_client: WeatherClient, config: dict):
+    # --- Station reporting noise (σ_reporting) ---
+    # This is the "representation error" between the forecast model's
+    # grid-point temperature and the integer the NWS station reports.
+    # Based on NWS verification statistics and station characteristics.
+    #
+    # Higher values for:
+    #   - Coastal cities (marine layer timing, onshore/offshore flow)
+    #   - Cities where microclimate dominates (SF, LA basin)
+    #   - Stations with known integer-stickiness in records
+    # Lower values for:
+    #   - Continental cities with well-mixed boundary layers
+    #   - Stations that closely match model grid representation
+    REPORTING_NOISE: dict[str, float] = {
+        # Coastal / marine-layer cities: high representation error
+        "San Francisco": 2.5,  # Extreme microclimate, fog/marine layer timing
+        "Los Angeles":   2.0,  # Basin effects, coastal vs inland variance
+        "Miami":         2.0,  # Sea-breeze timing, marine influence
+        "Boston":        1.8,  # Coastal, harbor effects
+        "Seattle":       1.8,  # Puget Sound marine influence
+        "New Orleans":   1.8,  # Gulf proximity, humidity effects on max
+        # Continental cities: moderate representation error
+        "New York":      1.5,  # Urban heat island, Central Park station
+        "Philadelphia":  1.5,
+        "Atlanta":       1.5,
+        "Chicago":       1.5,
+        "Minneapolis":   1.5,
+        "Houston":       1.5,
+        "Dallas":        1.5,
+        # Arid / clear-sky cities: lower (forecasts are good) but station effects persist
+        "Denver":        1.5,  # Altitude, chinook effects can surprise
+        "Phoenix":       1.2,  # Very predictable, but station siting matters
+        "Las Vegas":     1.2,  # Arid, stable, low representation error
+    }
+    DEFAULT_REPORTING_NOISE = 1.5  # Fallback for unknown cities
+    
+    def __init__(self, weather_client: WeatherClient, config: dict | None):
         """
         Initialize the probability model.
         
@@ -75,12 +125,15 @@ class WeatherProbabilityModel:
             config: Configuration dictionary
         """
         self.weather_client = weather_client
-        self.config = config
+        self.config = config if isinstance(config, dict) else {}
+        
+        # Allow config overrides for reporting noise
+        model_config = self.config.get("model") or {}
+        self.reporting_noise_overrides = model_config.get("reporting_noise", {})
         
         # Confidence decay: reduce confidence for stale data
-        self.confidence_decay_hours = config.get("edge", {}).get(
-            "confidence_decay_hours", 6
-        )
+        edge_config = self.config.get("edge") or {}
+        self.confidence_decay_hours = edge_config.get("confidence_decay_hours", 6)
     
     def evaluate_market(self, market: KalshiMarket) -> EdgeResult | None:
         """
@@ -179,6 +232,73 @@ class WeatherProbabilityModel:
             reasoning=reasoning
         )
     
+    def _get_reporting_noise(self, location: str) -> float:
+        """
+        Get the station reporting noise (σ_reporting) for a city.
+        
+        Checks config overrides first, then the built-in table.
+        
+        Args:
+            location: City name
+        
+        Returns:
+            σ_reporting in °F
+        """
+        # Config override takes precedence
+        if location in self.reporting_noise_overrides:
+            return float(self.reporting_noise_overrides[location])
+        return self.REPORTING_NOISE.get(location, self.DEFAULT_REPORTING_NOISE)
+    
+    def _get_effective_std(
+        self, 
+        forecast_std: float, 
+        location: str
+    ) -> tuple[float, float, float]:
+        """
+        Compute the effective σ for the reported-temperature distribution.
+        
+            σ²_eff = σ²_forecast + σ²_reporting
+        
+        This is the standard representation-error decomposition from
+        data assimilation / forecast verification literature.
+        
+        Args:
+            forecast_std: The forecast model's uncertainty (σ_forecast)
+            location: City name (for station-specific reporting noise)
+        
+        Returns:
+            (sigma_effective, sigma_forecast, sigma_reporting) tuple
+        """
+        sigma_reporting = self._get_reporting_noise(location)
+        sigma_forecast = max(forecast_std, 0.5)  # Floor: forecast can't be perfect
+        sigma_eff = math.sqrt(sigma_forecast ** 2 + sigma_reporting ** 2)
+        return sigma_eff, sigma_forecast, sigma_reporting
+    
+    def _discrete_integer_prob(
+        self,
+        forecast_temp: float,
+        std: float,
+        k: int
+    ) -> float:
+        """
+        Probability that the NWS reports integer temperature k.
+        
+        Uses the effective σ (already combining forecast + reporting noise):
+        
+            P(reported = k) = Φ((k + 0.5 − μ) / σ_eff) − Φ((k − 0.5 − μ) / σ_eff)
+        
+        Args:
+            forecast_temp: Forecast mean (μ) in Fahrenheit
+            std: Effective standard deviation (σ_eff), NOT raw forecast σ
+            k: The integer temperature value
+        
+        Returns:
+            Probability (0-1) that the NWS reports exactly k°F
+        """
+        z_upper = (k + 0.5 - forecast_temp) / std
+        z_lower = (k - 0.5 - forecast_temp) / std
+        return self._normal_cdf(z_upper) - self._normal_cdf(z_lower)
+
     def _calculate_probability(
         self, 
         weather: WeatherData, 
@@ -186,49 +306,27 @@ class WeatherProbabilityModel:
         threshold_type: str
     ) -> float:
         """
-        Calculate probability of temperature crossing threshold.
+        Probability that the NWS-reported integer temperature crosses a threshold.
         
-        Uses normal distribution with forecast as mean and forecast_std as σ.
-        
-        Args:
-            weather: Weather forecast data
-            threshold: Temperature threshold (Fahrenheit)
-            threshold_type: One of "high_above", "high_below", "low_above", "low_below"
-        
-        Returns:
-            Probability (0-1) of the event occurring
+        Uses σ_effective (forecast + reporting noise) in the discrete model:
+        - "above" (reported ≥ T): P = 1 − Φ((T − 0.5 − μ) / σ_eff)
+        - "below" (reported ≤ T): P = Φ((T + 0.5 − μ) / σ_eff)
         """
-        # Select relevant forecast values based on threshold type
         if threshold_type.startswith("high"):
             forecast_temp = weather.high_temp_f
-            std = weather.high_temp_std
+            forecast_std = weather.high_temp_std
         else:
             forecast_temp = weather.low_temp_f
-            std = weather.low_temp_std
+            forecast_std = weather.low_temp_std
         
-        # Avoid division by zero
-        if std <= 0:
-            std = 3.0  # Default uncertainty
-        
-        # Apply continuity correction for integer-reported temperatures.
-        # Treat thresholds as boundaries between integer values.
-        if threshold_type.endswith("above"):
-            threshold_adj = threshold - 0.5
-        else:
-            threshold_adj = threshold + 0.5
-
-        # Calculate z-score: how many std devs is threshold from forecast?
-        z = (threshold_adj - forecast_temp) / std
-        
-        # Calculate probability using error function approximation
-        # P(X > threshold) = 1 - Φ(z) for "above" events
-        # P(X < threshold) = Φ(z) for "below" events
-        prob_above = 1 - self._normal_cdf(z)
+        std_eff, _, _ = self._get_effective_std(forecast_std, weather.location)
         
         if threshold_type.endswith("above"):
-            return prob_above
+            z = (threshold - 0.5 - forecast_temp) / std_eff
+            return 1 - self._normal_cdf(z)
         else:  # below
-            return 1 - prob_above
+            z = (threshold + 0.5 - forecast_temp) / std_eff
+            return self._normal_cdf(z)
     
     def _calculate_bucket_probability(
         self,
@@ -238,41 +336,34 @@ class WeatherProbabilityModel:
         threshold_type: str
     ) -> float:
         """
-        Calculate probability of temperature falling within a bucket range.
+        Probability for a bucket market — a SINGLE discrete integer outcome.
         
-        P(lower <= temp < upper) = Φ(z_upper) - Φ(z_lower)
+        Kalshi bucket "72° to 73°" settles YES iff the NWS reports exactly
+        the integer temperature = lower_bound (72).
+        
+        Uses σ_effective (forecast + reporting noise) so that a centered
+        1°F bucket gets realistic mass (~15–20% for typical σ_eff ≈ 2–2.5°F)
+        rather than the inflated values from using raw forecast σ alone.
         
         Args:
             weather: Weather forecast data
-            lower: Lower bound of bucket (Fahrenheit)
-            upper: Upper bound of bucket (Fahrenheit)
+            lower: The integer temperature this bucket represents
+            upper: Upper label (lower + 1); not used in calculation
             threshold_type: Starts with "high" or "low"
         
         Returns:
-            Probability (0-1) of temperature in range
+            Probability (0-1) that NWS reports exactly lower°F
         """
         if threshold_type.startswith("high"):
             forecast_temp = weather.high_temp_f
-            std = weather.high_temp_std
+            forecast_std = weather.high_temp_std
         else:
             forecast_temp = weather.low_temp_f
-            std = weather.low_temp_std
+            forecast_std = weather.low_temp_std
         
-        if std <= 0:
-            std = 3.0
+        std_eff, _, _ = self._get_effective_std(forecast_std, weather.location)
         
-        # Apply continuity correction for integer buckets.
-        # A bucket like 36-37 corresponds to [35.5, 37.5) in continuous space.
-        lower_adj = lower - 0.5
-        upper_adj = upper + 0.5
-
-        z_lower = (lower_adj - forecast_temp) / std
-        z_upper = (upper_adj - forecast_temp) / std
-        
-        # P(lower <= X < upper) = Φ(z_upper) - Φ(z_lower)
-        prob = self._normal_cdf(z_upper) - self._normal_cdf(z_lower)
-        
-        return prob
+        return self._discrete_integer_prob(forecast_temp, std_eff, int(lower))
     
     @staticmethod
     def _normal_cdf(z: float) -> float:
@@ -348,16 +439,20 @@ class WeatherProbabilityModel:
             else "Market is fairly priced"
         )
         
+        # Show effective σ decomposition for transparency
+        std_eff, sigma_fc, sigma_rpt = self._get_effective_std(std, weather.location)
+        sigma_str = f"σ_eff={std_eff:.1f}°F (σ_fc={sigma_fc:.1f} + σ_rpt={sigma_rpt:.1f})"
+        
         if is_bucket and lower is not None and upper is not None:
             return (
-                f"Forecast {temp_type}: {forecast:.0f}°F ± {std:.1f}°F | "
-                f"P({lower:.0f}° ≤ {temp_type} < {upper:.0f}°) = {fair_prob:.1%} | "
+                f"Forecast {temp_type}: {forecast:.0f}°F | {sigma_str} | "
+                f"P(reported = {lower:.0f}°F) = {fair_prob:.1%} | "
                 f"Market: {market_prob:.1%} | {edge_assessment}"
             )
         else:
             direction = "above" if threshold_type.endswith("above") else "below"
             return (
-                f"Forecast {temp_type}: {forecast:.0f}°F ± {std:.1f}°F | "
-                f"P({temp_type} {direction} {threshold:.0f}°F) = {fair_prob:.1%} | "
+                f"Forecast {temp_type}: {forecast:.0f}°F | {sigma_str} | "
+                f"P(reported {direction} {threshold:.0f}°F) = {fair_prob:.1%} | "
                 f"Market: {market_prob:.1%} | {edge_assessment}"
             )

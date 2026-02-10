@@ -28,9 +28,21 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
     """
     if config_path is None:
         config_path = Path(__file__).parent.parent / "config.yaml"
-    
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
+
+    try:
+        with open(config_path, "r") as f:
+            loaded = yaml.safe_load(f)
+    except FileNotFoundError:
+        loaded = {}
+    except yaml.YAMLError as e:
+        raise RuntimeError(f"Failed to parse YAML config at {config_path}") from e
+
+    # yaml.safe_load returns None for empty files / comment-only files.
+    config: dict[str, Any] = loaded or {}
+    if not isinstance(config, dict):
+        raise TypeError(
+            f"Config at {config_path} must be a YAML mapping (dict), got {type(config).__name__}"
+        )
     
     # Override with environment variables where applicable
     if os.getenv("KALSHI_EMAIL"):

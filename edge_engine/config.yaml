@@ -21,6 +21,19 @@ edge:
   threshold: 0.05          # Minimum edge to trigger signal (5%)
   confidence_decay_hours: 6  # Data older than this reduces confidence
 
+# Probability model parameters
+model:
+  # Station reporting noise (σ_reporting) overrides per city.
+  # This is the "representation error" between the forecast model's
+  # grid-point temperature and the NWS station's reported integer.
+  # σ²_effective = σ²_forecast + σ²_reporting
+  # Higher values → wider distribution → smaller single-bucket probabilities.
+  # Built-in defaults exist in the code; add overrides here if needed.
+  # reporting_noise:
+  #   San Francisco: 2.5
+  #   Miami: 2.0
+  #   Los Angeles: 2.0
+
 # Polling configuration
 polling:
   interval_seconds: 30     # How often to check markets
