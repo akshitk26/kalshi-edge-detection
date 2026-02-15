@@ -64,14 +64,36 @@ class WeatherClient:
         if self.use_mock:
             return self._get_mock_forecast(location, target_date)
         
+        # Special case: If target date is TODAY and late in day, forecast might not have data
+        # Use current weather as best estimate
+        is_today = target_date.date() == datetime.now(timezone.utc).date()
+        
         # 1. Fetch main forecast
         forecast_data = self._fetch_forecast(location, target_date)
+        
+        # 2. If no forecast but it's today, use current weather
+        if not forecast_data and is_today:
+            current_temp = self._fetch_current_temp(location)
+            if current_temp:
+                # Use current temp as high estimate (best we can do)
+                return WeatherData(
+                    location=location,
+                    forecast_date=target_date,
+                    high_temp_f=current_temp,
+                    low_temp_f=current_temp - 10,  # rough estimate
+                    high_temp_std=0.5,  # low uncertainty since it's current
+                    low_temp_std=2.0,
+                    source="openweathermap_current",
+                    fetched_at=datetime.now(timezone.utc),
+                    current_temp_f=current_temp
+                )
+        
         if not forecast_data:
             return None
 
-        # 2. Fetch current observation if target is TODAY
+        # 3. Fetch current observation if target is TODAY to enhance forecast
         current_obs = None
-        if target_date.date() == datetime.now(timezone.utc).date():
+        if is_today:
             current_obs = self._fetch_current_temp(location)
 
         # 3. Combine into final object

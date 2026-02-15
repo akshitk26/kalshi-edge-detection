@@ -19,6 +19,7 @@ class EdgeResult:
     edge: float
     confidence: float
     reasoning: str
+    direction: str
 
 class WeatherProbabilityModel:
     # RESTORED: Your original detailed reporting noise table
@@ -37,7 +38,8 @@ class WeatherProbabilityModel:
 
     def evaluate_market(self, market: KalshiMarket) -> EdgeResult | None:
         params = KalshiClient.parse_market_params(market)
-        if not params: return None
+        if not params:
+            return None
 
         # Correct date extraction from ticker
         ticker_parts = market.market_id.split('-')
@@ -50,7 +52,8 @@ class WeatherProbabilityModel:
             weather_date = market.close_time - timedelta(days=1)
 
         weather = self.weather_client.get_forecast(params["location"], weather_date)
-        if not weather: return None
+        if not weather:
+            return None
 
         # 1. Base statistical probability (using your discrete PMF logic)
         if params.get("is_bucket"):
@@ -71,6 +74,7 @@ class WeatherProbabilityModel:
                     elif "below" in params["threshold_type"] and current >= thresh: fair_prob = 0.0
 
         edge = fair_prob - market.market_prob
+        direction = "BUY YES" if edge > 0 else "BUY NO"
         
         # Build reasoning
         reasoning = f"Forecast: {weather.high_temp_f:.1f}°F"
@@ -80,7 +84,8 @@ class WeatherProbabilityModel:
         return EdgeResult(
             market=market, market_prob=market.market_prob,
             fair_prob=fair_prob, edge=edge,
-            confidence=0.8, reasoning=reasoning
+            confidence=0.8, reasoning=reasoning,
+            direction=direction
         )
 
     # --- RESTORED: All original math functions ---
