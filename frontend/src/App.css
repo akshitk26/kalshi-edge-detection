@@ -200,16 +200,16 @@
   font-size: var(--fs-xs);
 }
 
-/* ─ Value colors ─ */
-.val-pos {
+/* ─ Value colors (specificity must beat .market-table td) ─ */
+.market-table td.val-pos {
   color: var(--green);
 }
 
-.val-neg {
+.market-table td.val-neg {
   color: var(--red);
 }
 
-.val-neutral {
+.market-table td.val-neutral {
   color: var(--text-muted);
 }
 
