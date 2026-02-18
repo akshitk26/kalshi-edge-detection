@@ -152,6 +152,68 @@ def get_market(ticker: str):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/lookup", methods=["GET"])
+def lookup_market():
+    """
+    Look up and analyze markets by Kalshi URL or ticker.
+
+    Query params:
+        q: Kalshi URL, market ticker, or series ticker
+
+    Returns same structure as /api/markets.
+    """
+    try:
+        q = request.args.get("q", "").strip()
+        if not q:
+            return jsonify({"error": "Missing ?q= parameter"}), 400
+
+        from edge_engine.analyze_market import (
+            parse_kalshi_url,
+            fetch_series_markets,
+            fetch_single_market,
+        )
+
+        series_ticker, market_ticker = parse_kalshi_url(q)
+
+        if not series_ticker:
+            return jsonify({"error": f"Could not parse: {q}"}), 400
+
+        # Fetch markets
+        if market_ticker and "-" in market_ticker and len(market_ticker.split("-")) >= 2:
+            markets = fetch_series_markets(_kalshi_client, series_ticker)
+            markets = [m for m in markets if m.market_id.upper().startswith(market_ticker.upper())]
+            if not markets:
+                market = fetch_single_market(_kalshi_client, market_ticker)
+                markets = [market] if market else []
+        else:
+            markets = fetch_series_markets(_kalshi_client, series_ticker)
+
+        if not markets:
+            return jsonify({"error": f"No markets found for {q}"}), 404
+
+        results = []
+        for market in markets:
+            result = _probability_model.evaluate_market(market)
+            if result is not None:
+                results.append(_market_to_dict(result))
+
+        results.sort(key=lambda r: abs(r["edge"]), reverse=True)
+
+        return jsonify({
+            "markets": results,
+            "meta": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "count": len(results),
+                "priceSource": _kalshi_client.price_source,
+                "query": q,
+            },
+        })
+
+    except Exception as e:
+        _logger.error(f"Lookup error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})

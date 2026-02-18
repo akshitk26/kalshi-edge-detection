@@ -293,3 +293,92 @@
   border-radius: 3px;
 }
 
+/* ─ Lookup bar ─ */
+.lookup-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 4px;
+  flex-wrap: wrap;
+}
+
+.lookup-label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.lookup-input {
+  flex: 1;
+  min-width: 300px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  background: var(--bg-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+}
+
+.lookup-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+}
+
+.lookup-input:focus {
+  outline: 1px solid var(--accent);
+}
+
+.lookup-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: 4px 12px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lookup-btn:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.lookup-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lookup-clear {
+  color: var(--text-muted);
+}
+
+.lookup-error {
+  font-size: var(--fs-xs);
+  color: var(--red);
+}
+
+.lookup-active-hint {
+  font-size: var(--fs-xs);
+  color: var(--accent);
+}
+
+.lookup-clear-inline {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+}
+
+.lookup-clear-inline:hover {
+  color: var(--text-primary);
+}
+

@@ -1,6 +1,26 @@
 import { useState, useMemo } from "react";
 import type { MarketRow, SortConfig, SortField, SortDirection } from "../types/market";
 
+/** All cities the backend probability model supports. */
+const ALL_CITIES = [
+  "Atlanta",
+  "Boston",
+  "Chicago",
+  "Dallas",
+  "Denver",
+  "Houston",
+  "Las Vegas",
+  "Los Angeles",
+  "Miami",
+  "Minneapolis",
+  "New Orleans",
+  "New York",
+  "Philadelphia",
+  "Phoenix",
+  "San Francisco",
+  "Seattle",
+] as const;
+
 interface FilterBarProps {
   markets: MarketRow[];
   onCityChange: (city: string) => void;
@@ -24,11 +44,6 @@ export function FilterBar({
   loading,
   priceSource,
 }: FilterBarProps) {
-  const cities = useMemo(() => {
-    const set = new Set(markets.map((m) => m.city).filter(Boolean));
-    return Array.from(set).sort();
-  }, [markets]);
-
   const dates = useMemo(() => {
     const set = new Set(markets.map((m) => m.date).filter(Boolean));
     return Array.from(set).sort();
@@ -44,7 +59,7 @@ export function FilterBar({
           onChange={(e) => onCityChange(e.target.value)}
         >
           <option value="">All</option>
-          {cities.map((c) => (
+          {ALL_CITIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
