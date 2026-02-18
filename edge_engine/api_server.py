@@ -1,0 +1,168 @@
+"""
+Edge Engine API Server
+
+Serves market analysis data as JSON for the frontend UI.
+
+Run: python -m edge_engine.api_server
+"""
+
+import sys
+from datetime import datetime, timezone
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+
+from edge_engine.data import KalshiClient, WeatherClient
+from edge_engine.models import WeatherProbabilityModel
+from edge_engine.utils.config_loader import load_config
+from edge_engine.utils.logging_setup import setup_logging, get_logger
+
+app = Flask(__name__)
+CORS(app)
+
+# Global state — initialized once at startup
+_config = None
+_kalshi_client = None
+_weather_client = None
+_probability_model = None
+_logger = None
+
+
+def _init_clients():
+    global _config, _kalshi_client, _weather_client, _probability_model, _logger
+    _config = load_config()
+    _logger = setup_logging("INFO")
+    _kalshi_client = KalshiClient(_config)
+    _weather_client = WeatherClient(_config)
+    _probability_model = WeatherProbabilityModel(_weather_client, _config)
+
+
+def _market_to_dict(result) -> dict:
+    """Convert an EdgeResult to a frontend-friendly dict."""
+    market = result.market
+    series_ticker = market.market_id.split("-")[0].lower()
+
+    # Determine action
+    if abs(result.edge) < 0.05:
+        action = "HOLD"
+    elif result.edge > 0:
+        action = "BUY YES"
+    else:
+        action = "BUY NO"
+
+    # Extract city from question or ticker
+    city = ""
+    params = KalshiClient.parse_market_params(market)
+    if params:
+        city = params.get("location", "")
+
+    # Extract date from ticker (e.g., KXHIGHNY-26FEB14-B46.5 → 26FEB14)
+    ticker_parts = market.market_id.split("-")
+    date_str = ticker_parts[1] if len(ticker_parts) >= 2 else ""
+
+    return {
+        "ticker": market.market_id,
+        "question": market.question,
+        "marketPrice": round(market.market_prob * 100, 1),
+        "fairProbability": round(result.fair_prob * 100, 1),
+        "edge": round(result.edge * 100, 1),
+        "action": action,
+        "confidence": round(result.confidence * 100, 1),
+        "volume": market.volume,
+        "hasLiquidity": market.has_liquidity,
+        "reasoning": result.reasoning,
+        "city": city,
+        "date": date_str,
+        "resolutionUrl": f"https://kalshi.com/markets/{series_ticker}",
+        "closeTime": market.close_time.isoformat(),
+    }
+
+
+@app.route("/api/markets", methods=["GET"])
+def get_markets():
+    """
+    Fetch and analyze all open weather markets.
+
+    Query params:
+        series: comma-separated series tickers (optional, defaults to all)
+
+    Returns JSON:
+        {
+            "markets": [...],
+            "meta": { "timestamp": "...", "count": N, "priceSource": "..." }
+        }
+    """
+    try:
+        series_param = request.args.get("series", "")
+
+        if series_param:
+            series_list = [s.strip().upper() for s in series_param.split(",")]
+        else:
+            series_list = None  # use defaults
+
+        # Fetch markets
+        if series_list:
+            markets = []
+            for s in series_list:
+                from edge_engine.analyze_market import fetch_series_markets
+                markets.extend(fetch_series_markets(_kalshi_client, s))
+        else:
+            markets = _kalshi_client.get_weather_markets()
+
+        # Evaluate each market
+        results = []
+        for market in markets:
+            result = _probability_model.evaluate_market(market)
+            if result is not None:
+                results.append(_market_to_dict(result))
+
+        # Sort by absolute edge descending
+        results.sort(key=lambda r: abs(r["edge"]), reverse=True)
+
+        return jsonify({
+            "markets": results,
+            "meta": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "count": len(results),
+                "priceSource": _kalshi_client.price_source,
+            },
+        })
+
+    except Exception as e:
+        _logger.error(f"API error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/markets/<ticker>", methods=["GET"])
+def get_market(ticker: str):
+    """Fetch and analyze a single market by ticker."""
+    try:
+        from edge_engine.analyze_market import fetch_single_market
+        market = fetch_single_market(_kalshi_client, ticker.upper())
+        if not market:
+            return jsonify({"error": f"Market {ticker} not found"}), 404
+
+        result = _probability_model.evaluate_market(market)
+        if result is None:
+            return jsonify({"error": f"Could not analyze {ticker}"}), 422
+
+        return jsonify({"market": _market_to_dict(result)})
+
+    except Exception as e:
+        _logger.error(f"API error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
+
+
+def main():
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5050
+    _init_clients()
+    _logger.info(f"Starting API server on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
+
+
+if __name__ == "__main__":
+    main()

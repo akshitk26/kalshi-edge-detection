@@ -1,0 +1,295 @@
+/* ── Edge Engine – App Styles ── */
+
+/* ─ Layout ─ */
+.app {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+}
+
+/* ─ Header ─ */
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.app-header h1 {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.app-subtitle {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ─ Filter Bar ─ */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 10px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filter-group label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-group select {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  background: var(--bg-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.filter-group select:focus {
+  outline: 1px solid var(--accent);
+}
+
+.filter-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meta-label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.refresh-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: 3px 10px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─ Table ─ */
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.market-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.market-table thead {
+  background: var(--bg-2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.market-table th {
+  padding: 6px 10px;
+  font-weight: 500;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.market-table th:hover {
+  color: var(--text-primary);
+}
+
+.market-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--bg-3);
+  color: var(--text-primary);
+}
+
+.market-table tbody tr:hover {
+  background: var(--bg-2);
+}
+
+/* Row highlight (best edge) */
+.row-highlight {
+  background: var(--bg-2) !important;
+  border-left: 2px solid var(--accent);
+}
+
+/* ─ Column alignment ─ */
+.col-left {
+  text-align: left;
+}
+
+.col-right {
+  text-align: right;
+}
+
+.col-center {
+  text-align: center;
+}
+
+.col-ticker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-reasoning {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.col-action {
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* ─ Value colors ─ */
+.val-pos {
+  color: var(--green);
+}
+
+.val-neg {
+  color: var(--red);
+}
+
+.val-neutral {
+  color: var(--text-muted);
+}
+
+/* ─ Action colors ─ */
+.action-yes {
+  color: var(--green);
+}
+
+.action-no {
+  color: var(--red);
+}
+
+.action-hold {
+  color: var(--text-muted);
+}
+
+/* ─ Liquidity indicators ─ */
+.liq-ok {
+  color: var(--green);
+  font-size: var(--fs-xs);
+}
+
+.liq-warn {
+  color: var(--yellow);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* ─ Sort indicator ─ */
+.sort-indicator {
+  margin-left: 3px;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.sort-indicator.active {
+  color: var(--accent);
+}
+
+/* ─ Resolution link button ─ */
+.link-btn {
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: 2px 8px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+/* ─ Status bar ─ */
+.status-bar {
+  padding: 6px 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.status-error {
+  color: var(--red);
+}
+
+.status-loading {
+  color: var(--text-secondary);
+}
+
+/* ─ Empty state ─ */
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
