@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { MarketRow, SortConfig, SortField } from "../types/market";
 
 interface MarketTableProps {
@@ -50,6 +51,17 @@ export function MarketTable({
   onSort,
   highestEdgeTicker,
 }: MarketTableProps) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (ticker: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  };
+
   if (markets.length === 0) {
     return <div className="empty-state">No markets match current filters.</div>;
   }
@@ -77,10 +89,18 @@ export function MarketTable({
         <tbody>
           {markets.map((m) => {
             const isHighest = m.ticker === highestEdgeTicker;
+            const isSelected = selected.has(m.ticker);
+            const rowClass = [
+              isHighest ? "row-highlight" : "",
+              isSelected ? "row-selected" : "",
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined;
             return (
               <tr
                 key={m.ticker}
-                className={isHighest ? "row-highlight" : undefined}
+                className={rowClass}
+                onClick={() => toggleSelect(m.ticker)}
               >
                 <td className="col-ticker" title={m.question}>
                   {m.ticker}

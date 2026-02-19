@@ -8,8 +8,8 @@ import type { MarketRow } from "./types/market";
 import "./App.css";
 
 export default function App() {
-  const { markets, meta, loading, error, refresh, lastRefresh } =
-    useMarkets(/* no auto-refresh; manual only */);
+  const { markets, meta, loading, error, refresh, lastRefresh, paused, togglePause } =
+    useMarkets();
 
   // Lookup overlay: when set, replaces the main table with lookup results
   const [lookupResults, setLookupResults] = useState<MarketRow[] | null>(null);
@@ -61,6 +61,8 @@ export default function App() {
         onRefresh={refresh}
         loading={loading}
         priceSource={meta?.priceSource ?? ""}
+        paused={paused}
+        onTogglePause={togglePause}
       />
 
       <MarketTable

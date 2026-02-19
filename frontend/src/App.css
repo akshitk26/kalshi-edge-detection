@@ -158,6 +158,21 @@
   border-left: 2px solid var(--accent);
 }
 
+/* Row selected (click toggle) */
+.row-selected {
+  background: rgba(107, 138, 175, 0.12) !important;
+  border-left: 2px solid var(--accent);
+}
+
+.market-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.row-selected:hover {
+  background: rgba(107, 138, 175, 0.18) !important;
+}
+
 /* ─ Column alignment ─ */
 .col-left {
   text-align: left;
@@ -380,5 +395,48 @@
 
 .lookup-clear-inline:hover {
   color: var(--text-primary);
+}
+
+/* ─ Pause / Resume button ─ */
+.pause-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: 3px 10px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
+}
+
+.pause-btn:hover {
+  background: var(--bg-2);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.pause-btn.paused {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.pause-btn.paused:hover {
+  background: var(--green-bg);
+}
+
+/* ─ Elapsed timer ─ */
+.elapsed-timer {
+  color: var(--yellow);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.refresh-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 

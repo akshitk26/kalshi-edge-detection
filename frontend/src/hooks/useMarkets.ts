@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { MarketRow, MarketsResponse } from "../types/market";
 
 const API_BASE = "/api";
+const DEFAULT_INTERVAL = 30_000; // 30 seconds
 
 interface UseMarketsResult {
   markets: MarketRow[];
@@ -10,14 +11,18 @@ interface UseMarketsResult {
   error: string | null;
   refresh: () => void;
   lastRefresh: Date | null;
+  paused: boolean;
+  togglePause: () => void;
 }
 
-export function useMarkets(autoRefreshMs = 0): UseMarketsResult {
+export function useMarkets(): UseMarketsResult {
   const [markets, setMarkets] = useState<MarketRow[]>([]);
   const [meta, setMeta] = useState<MarketsResponse["meta"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [paused, setPaused] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMarkets = useCallback(async () => {
     setLoading(true);
@@ -40,15 +45,47 @@ export function useMarkets(autoRefreshMs = 0): UseMarketsResult {
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchMarkets();
   }, [fetchMarkets]);
 
+  // Auto-refresh interval (runs unless paused)
   useEffect(() => {
-    if (autoRefreshMs <= 0) return;
-    const id = setInterval(fetchMarkets, autoRefreshMs);
-    return () => clearInterval(id);
-  }, [autoRefreshMs, fetchMarkets]);
+    if (paused) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+    intervalRef.current = setInterval(fetchMarkets, DEFAULT_INTERVAL);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [paused, fetchMarkets]);
 
-  return { markets, meta, loading, error, refresh: fetchMarkets, lastRefresh };
+  const togglePause = useCallback(() => {
+    setPaused((prev) => {
+      if (prev) {
+        // Resuming — refresh immediately
+        fetchMarkets();
+      }
+      return !prev;
+    });
+  }, [fetchMarkets]);
+
+  return {
+    markets,
+    meta,
+    loading,
+    error,
+    refresh: fetchMarkets,
+    lastRefresh,
+    paused,
+    togglePause,
+  };
 }

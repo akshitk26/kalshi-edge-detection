@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { MarketRow, SortConfig, SortField, SortDirection } from "../types/market";
 
 /** All cities the backend probability model supports. */
@@ -31,6 +31,39 @@ interface FilterBarProps {
   onRefresh: () => void;
   loading: boolean;
   priceSource: string;
+  paused: boolean;
+  onTogglePause: () => void;
+}
+
+function formatEST(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }) + " EST";
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s ago`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s ago`;
+}
+
+function ElapsedTimer({ since }: { since: Date }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(Math.floor((Date.now() - since.getTime()) / 1000));
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - since.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [since]);
+
+  return <span className="elapsed-timer">{formatElapsed(elapsed)}</span>;
 }
 
 export function FilterBar({
@@ -43,6 +76,8 @@ export function FilterBar({
   onRefresh,
   loading,
   priceSource,
+  paused,
+  onTogglePause,
 }: FilterBarProps) {
   const dates = useMemo(() => {
     const set = new Set(markets.map((m) => m.date).filter(Boolean));
@@ -86,10 +121,23 @@ export function FilterBar({
       <div className="filter-meta">
         <span className="meta-label">Source: {priceSource || "—"}</span>
         {lastRefresh && (
-          <span className="meta-label">
-            Updated: {lastRefresh.toLocaleTimeString()}
+          <span className="meta-label refresh-info">
+            Last refresh: {formatEST(lastRefresh)}
+            {paused && (
+              <>
+                {" · "}
+                <ElapsedTimer since={lastRefresh} />
+              </>
+            )}
           </span>
         )}
+        <button
+          className={`pause-btn ${paused ? "paused" : ""}`}
+          onClick={onTogglePause}
+          title={paused ? "Resume auto-refresh" : "Pause auto-refresh"}
+        >
+          {paused ? "▶ Resume" : "⏸ Pause"}
+        </button>
         <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
           {loading ? "…" : "Refresh"}
         </button>
