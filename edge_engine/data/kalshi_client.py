@@ -24,26 +24,39 @@ class KalshiMarket:
     fetched_at: datetime
     volume: int = 0
     has_liquidity: bool = True
+    # Raw bid/ask for hedge calculator
+    yes_bid: int = 0
+    yes_ask: int = 0
+    no_bid: int = 0
+    no_ask: int = 0
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any], price_source: str = "last_price") -> "KalshiMarket":
-        yes_bid = data.get("yes_bid", 0) or 0
-        yes_ask = data.get("yes_ask", 0) or 0
+        raw_yes_bid = data.get("yes_bid", 0) or 0
+        raw_yes_ask = data.get("yes_ask", 0) or 0
         last_price = data.get("last_price", 0) or 0
+        raw_no_bid = data.get("no_bid", 0) or 0
+        raw_no_ask = data.get("no_ask", 0) or 0
+        
+        # Derive NO prices from YES if not provided by API
+        if raw_no_bid == 0 and raw_yes_ask > 0:
+            raw_no_bid = 100 - raw_yes_ask
+        if raw_no_ask == 0 and raw_yes_bid > 0:
+            raw_no_ask = 100 - raw_yes_bid
         
         # Liquidity check
-        has_liquidity = yes_bid > 0 and yes_ask > 0 and (yes_ask - yes_bid) <= 15
+        has_liquidity = raw_yes_bid > 0 and raw_yes_ask > 0 and (raw_yes_ask - raw_yes_bid) <= 15
         
         # Determine price
         if price_source == "yes_ask":
-            yes_price = yes_ask or last_price or yes_bid
+            yes_price = raw_yes_ask or last_price or raw_yes_bid
         elif price_source == "mid":
-            if yes_bid > 0 and yes_ask > 0:
-                yes_price = (yes_bid + yes_ask) // 2
+            if raw_yes_bid > 0 and raw_yes_ask > 0:
+                yes_price = (raw_yes_bid + raw_yes_ask) // 2
             else:
-                yes_price = last_price or yes_ask or yes_bid
+                yes_price = last_price or raw_yes_ask or raw_yes_bid
         else:
-            yes_price = last_price or yes_ask or yes_bid
+            yes_price = last_price or raw_yes_ask or raw_yes_bid
             
         # Default to 50 cents if essentially no data, to avoid 0% math errors later
         if yes_price == 0 and not has_liquidity:
@@ -62,7 +75,11 @@ class KalshiMarket:
             category=data.get("category", "unknown"),
             fetched_at=datetime.now(timezone.utc),
             volume=data.get("volume", 0),
-            has_liquidity=has_liquidity
+            has_liquidity=has_liquidity,
+            yes_bid=raw_yes_bid,
+            yes_ask=raw_yes_ask,
+            no_bid=raw_no_bid,
+            no_ask=raw_no_ask,
         )
 
 class KalshiClient:

@@ -13,6 +13,7 @@ from flask_cors import CORS
 
 from edge_engine.data import KalshiClient, WeatherClient
 from edge_engine.models import WeatherProbabilityModel
+from edge_engine.hedge import MarketGrouper, HedgeCalculator
 from edge_engine.utils.config_loader import load_config
 from edge_engine.utils.logging_setup import setup_logging, get_logger
 
@@ -24,16 +25,20 @@ _config = None
 _kalshi_client = None
 _weather_client = None
 _probability_model = None
+_market_grouper = None
+_hedge_calculator = None
 _logger = None
 
 
 def _init_clients():
-    global _config, _kalshi_client, _weather_client, _probability_model, _logger
+    global _config, _kalshi_client, _weather_client, _probability_model, _market_grouper, _hedge_calculator, _logger
     _config = load_config()
     _logger = setup_logging("INFO")
     _kalshi_client = KalshiClient(_config)
     _weather_client = WeatherClient(_config)
     _probability_model = WeatherProbabilityModel(_weather_client, _config)
+    _market_grouper = MarketGrouper()
+    _hedge_calculator = HedgeCalculator()
 
 
 def _market_to_dict(result) -> dict:
@@ -211,6 +216,103 @@ def lookup_market():
 
     except Exception as e:
         _logger.error(f"Lookup error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── Hedge Group Endpoints ───────────────────────────────────────────
+
+@app.route("/api/hedge-groups", methods=["GET"])
+def get_hedge_groups():
+    """
+    Fetch all current hedge groups (markets grouped by city+date).
+
+    Query params:
+        series: comma-separated series tickers (optional)
+    """
+    try:
+        series_param = request.args.get("series", "")
+
+        if series_param:
+            series_list = [s.strip().upper() for s in series_param.split(",")]
+            markets = []
+            for s in series_list:
+                from edge_engine.analyze_market import fetch_series_markets
+                markets.extend(fetch_series_markets(_kalshi_client, s))
+        else:
+            markets = _kalshi_client.get_weather_markets()
+
+        groups = _market_grouper.group_markets(markets)
+
+        return jsonify({
+            "groups": [g.to_dict() for g in groups],
+            "meta": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "count": len(groups),
+                "totalMarkets": len(markets),
+                "priceSource": _kalshi_client.price_source,
+            },
+        })
+
+    except Exception as e:
+        _logger.error(f"Hedge groups error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/hedge-groups/<group_id>/calculate", methods=["GET"])
+def calculate_hedge(group_id: str):
+    """
+    Calculate optimal allocation for a hedge group.
+
+    Query params:
+        budget: budget in dollars (required)
+        fee: fee per contract in dollars (optional, default 0.011)
+        selected: comma-separated tickers to include (optional, default all)
+    """
+    try:
+        budget_str = request.args.get("budget")
+        if not budget_str:
+            return jsonify({"error": "Missing ?budget= parameter"}), 400
+
+        try:
+            budget = float(budget_str)
+        except ValueError:
+            return jsonify({"error": f"Invalid budget: {budget_str}"}), 400
+
+        if budget <= 0:
+            return jsonify({"error": "Budget must be positive"}), 400
+
+        fee = float(request.args.get("fee", "0.011"))
+        selected_param = request.args.get("selected", "")
+        selected_tickers = (
+            [s.strip().upper() for s in selected_param.split(",") if s.strip()]
+            if selected_param
+            else None
+        )
+
+        # Fetch markets and find the matching group
+        markets = _kalshi_client.get_weather_markets()
+        groups = _market_grouper.group_markets(markets)
+
+        target_group = None
+        for g in groups:
+            if g.group_id.upper() == group_id.upper():
+                target_group = g
+                break
+
+        if not target_group:
+            return jsonify({"error": f"Group {group_id} not found"}), 404
+
+        result = _hedge_calculator.calculate(
+            target_group, budget, fee, selected_tickers
+        )
+
+        return jsonify({
+            "allocation": result.to_dict(),
+            "group": target_group.to_dict(),
+        })
+
+    except Exception as e:
+        _logger.error(f"Hedge calculate error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 

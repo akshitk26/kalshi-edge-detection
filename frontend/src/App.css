@@ -1,4 +1,4 @@
-/* ── Edge Engine – App Styles ── */
+/* ── AlphaCast – App Styles ── */
 
 /* ─ Layout ─ */
 .app {
@@ -440,3 +440,400 @@
   gap: 4px;
 }
 
+/* ─────────────────────────────────────────── */
+/* ─ Tab Navigation ─ */
+/* ─────────────────────────────────────────── */
+.app-header {
+  flex-wrap: wrap;
+}
+
+.app-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tab-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-2);
+}
+
+.tab-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-2);
+  border-color: var(--border);
+}
+
+/* ─────────────────────────────────────────── */
+/* ─ Budget Bar ─ */
+/* ─────────────────────────────────────────── */
+.budget-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.budget-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.budget-field label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.input-with-prefix,
+.input-with-suffix {
+  display: flex;
+  align-items: center;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.input-with-prefix:focus-within,
+.input-with-suffix:focus-within {
+  border-color: var(--accent);
+}
+
+.input-with-prefix .prefix,
+.input-with-suffix .suffix {
+  padding: 4px 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--bg-3);
+  flex-shrink: 0;
+}
+
+.budget-field input {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  width: 100px;
+  outline: none;
+}
+
+.fee-field input {
+  width: 50px;
+}
+
+/* ─────────────────────────────────────────── */
+/* ─ Hedge Dashboard ─ */
+/* ─────────────────────────────────────────── */
+/* ── Hedge Dashboard ── */
+
+.hedge-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0 10px;
+}
+
+.hedge-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.hedge-error {
+  padding: 8px 12px;
+  font-size: var(--fs-sm);
+  color: var(--red);
+  background: var(--red-bg);
+  border: 1px solid var(--red);
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+
+.hedge-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ─────────────────────────────────────────── */
+/* ─ Hedge Group Card ─ */
+/* ─────────────────────────────────────────── */
+.hedge-card {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-1);
+  transition: border-color 0.15s ease;
+}
+
+.hedge-card:hover {
+  border-color: var(--bg-3);
+}
+
+.hedge-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hedge-card-header:hover {
+  background: var(--bg-2);
+}
+
+.hedge-card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+}
+
+.hedge-card-title h3 {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hedge-type-badge {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 5px;
+  background: var(--bg-3);
+  color: var(--text-muted);
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+.hedge-date {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.hedge-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overround-badge {
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.overround-high {
+  color: var(--green);
+  background: var(--green-bg);
+}
+
+.overround-mid {
+  color: var(--yellow);
+  background: rgba(194, 162, 77, 0.08);
+}
+
+.overround-none {
+  color: var(--text-muted);
+  background: var(--bg-3);
+}
+
+.bucket-count {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.liq-badge-warn {
+  font-size: var(--fs-xs);
+  color: var(--yellow);
+}
+
+.expand-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+/* ─ Card Body ─ */
+.hedge-card-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ─ Bucket Table ─ */
+.bucket-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  margin-top: 10px;
+}
+
+.bucket-table th {
+  padding: 5px 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+}
+
+.bucket-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--bg-3);
+  color: var(--text-primary);
+}
+
+.bucket-table tbody tr:hover {
+  background: var(--bg-2);
+}
+
+.bucket-table .col-check {
+  width: 24px;
+  text-align: center;
+}
+
+.bucket-table input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.row-excluded {
+  opacity: 0.35;
+}
+
+.row-excluded td {
+  color: var(--text-muted) !important;
+}
+
+/* bucket table profit/loss colors */
+.bucket-table .val-pos {
+  color: var(--green);
+}
+
+.bucket-table .val-neg {
+  color: var(--red);
+}
+
+/* ─ Summary Grid ─ */
+.hedge-summary {
+  margin-top: 12px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border-radius: 3px;
+}
+
+.summary-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-value.val-pos {
+  color: var(--green);
+}
+
+.summary-value.val-neg {
+  color: var(--red);
+}
+
+/* ─ Scenario Breakdown ─ */
+.scenarios-details {
+  margin-top: 8px;
+}
+
+.scenarios-details summary {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.scenarios-details summary:hover {
+  color: var(--text-primary);
+}
+
+.scenario-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  margin-top: 6px;
+}
+
+.scenario-table th {
+  padding: 4px 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+}
+
+.scenario-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--bg-3);
+  color: var(--text-primary);
+}
+
+.scenario-table .val-pos {
+  color: var(--green);
+}
+
+.scenario-table .val-neg {
+  color: var(--red);
+}
+
+/* ─ Card Loading ─ */
+.card-loading {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 8px 0;
+  text-align: center;
+}

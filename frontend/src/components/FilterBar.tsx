@@ -134,9 +134,9 @@ export function FilterBar({
         <button
           className={`pause-btn ${paused ? "paused" : ""}`}
           onClick={onTogglePause}
-          title={paused ? "Resume auto-refresh" : "Pause auto-refresh"}
+          title={paused ? "Resume auto-refresh" : "Freeze auto-refresh"}
         >
-          {paused ? "▶ Resume" : "⏸ Pause"}
+          {paused ? "▶ Resume" : "❄ Freeze"}
         </button>
         <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
           {loading ? "…" : "Refresh"}

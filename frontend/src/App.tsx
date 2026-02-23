@@ -4,19 +4,30 @@ import { FilterBar, useSortedMarkets } from "./components/FilterBar";
 import { LookupBar } from "./components/LookupBar";
 import { MarketTable } from "./components/MarketTable";
 import { StatusBar } from "./components/StatusBar";
+import { HedgeDashboard } from "./components/HedgeDashboard";
 import type { MarketRow } from "./types/market";
 import "./App.css";
 
+type Tab = "hedge" | "scanner";
+
 export default function App() {
-  const { markets, meta, loading, error, refresh, lastRefresh, paused, togglePause } =
-    useMarkets();
+  const [activeTab, setActiveTab] = useState<Tab>("hedge");
 
-  // Lookup overlay: when set, replaces the main table with lookup results
+  // --- Scanner state (only used when tab === "scanner") ---
+  const {
+    markets,
+    meta,
+    loading,
+    error,
+    refresh,
+    lastRefresh,
+    paused,
+    togglePause,
+  } = useMarkets();
+
   const [lookupResults, setLookupResults] = useState<MarketRow[] | null>(null);
-
   const activeMarkets = lookupResults ?? markets;
 
-  // Filters
   const [cityFilter, setCityFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
 
@@ -27,10 +38,8 @@ export default function App() {
     return rows;
   }, [activeMarkets, cityFilter, dateFilter]);
 
-  // Sort
   const { sorted, sort, toggleSort } = useSortedMarkets(filtered);
 
-  // Highlight highest absolute edge
   const highestEdgeTicker = useMemo(() => {
     if (sorted.length === 0) return null;
     return sorted.reduce((best, m) =>
@@ -42,48 +51,73 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>AlphaCast</h1>
-        <span className="app-subtitle">Weather Market Scanner</span>
+        <nav className="app-tabs">
+          <button
+            className={`tab-btn ${activeTab === "hedge" ? "active" : ""}`}
+            onClick={() => setActiveTab("hedge")}
+          >
+            💰 Hedge
+          </button>
+          <button
+            className={`tab-btn ${activeTab === "scanner" ? "active" : ""}`}
+            onClick={() => setActiveTab("scanner")}
+          >
+            🔍 Scanner
+          </button>
+        </nav>
       </header>
 
-      <LookupBar
-        onResults={setLookupResults}
-        onClear={() => setLookupResults(null)}
-        hasResults={lookupResults !== null}
-      />
+      {activeTab === "hedge" && <HedgeDashboard />}
 
-      <FilterBar
-        markets={activeMarkets}
-        selectedCity={cityFilter}
-        selectedDate={dateFilter}
-        onCityChange={setCityFilter}
-        onDateChange={setDateFilter}
-        lastRefresh={lastRefresh}
-        onRefresh={refresh}
-        loading={loading}
-        priceSource={meta?.priceSource ?? ""}
-        paused={paused}
-        onTogglePause={togglePause}
-      />
+      {activeTab === "scanner" && (
+        <>
+          <LookupBar
+            onResults={setLookupResults}
+            onClear={() => setLookupResults(null)}
+            hasResults={lookupResults !== null}
+          />
 
-      <MarketTable
-        markets={sorted}
-        sort={sort}
-        onSort={toggleSort}
-        highestEdgeTicker={highestEdgeTicker}
-      />
+          <FilterBar
+            markets={activeMarkets}
+            selectedCity={cityFilter}
+            selectedDate={dateFilter}
+            onCityChange={setCityFilter}
+            onDateChange={setDateFilter}
+            lastRefresh={lastRefresh}
+            onRefresh={refresh}
+            loading={loading}
+            priceSource={meta?.priceSource ?? ""}
+            paused={paused}
+            onTogglePause={togglePause}
+          />
 
-      <StatusBar
-        total={activeMarkets.length}
-        filtered={sorted.length}
-        loading={loading}
-        error={error}
-      />
-      {lookupResults !== null && (
-        <div className="status-bar">
-          <span className="lookup-active-hint">
-            Showing lookup results · <button className="lookup-clear-inline" onClick={() => setLookupResults(null)}>back to all markets</button>
-          </span>
-        </div>
+          <MarketTable
+            markets={sorted}
+            sort={sort}
+            onSort={toggleSort}
+            highestEdgeTicker={highestEdgeTicker}
+          />
+
+          <StatusBar
+            total={activeMarkets.length}
+            filtered={sorted.length}
+            loading={loading}
+            error={error}
+          />
+          {lookupResults !== null && (
+            <div className="status-bar">
+              <span className="lookup-active-hint">
+                Showing lookup results ·{" "}
+                <button
+                  className="lookup-clear-inline"
+                  onClick={() => setLookupResults(null)}
+                >
+                  back to all markets
+                </button>
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
