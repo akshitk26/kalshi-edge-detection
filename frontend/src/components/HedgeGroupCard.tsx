@@ -194,6 +194,9 @@ export function HedgeGroupCard({
                             {qualityLabel}
                         </span>
                     )}
+                    {loading && !result && (
+                        <span className="loading-dot" />
+                    )}
                 </div>
                 <div className="hedge-card-badges">
                     <span className={`overround-badge ${overroundClass}`}>
@@ -492,7 +495,20 @@ export function HedgeGroupCard({
                         </div>
                     )}
 
-                    {loading && <div className="card-loading">Calculating...</div>}
+                    {loading && (
+                        <div className="card-skeleton">
+                            <div className="skeleton-row"><div className="skeleton-bar w60" /><div className="skeleton-bar w40" /></div>
+                            <div className="skeleton-row"><div className="skeleton-bar w80" /><div className="skeleton-bar w30" /></div>
+                            <div className="skeleton-row"><div className="skeleton-bar w50" /><div className="skeleton-bar w50" /></div>
+                            <div className="skeleton-summary">
+                                <div className="skeleton-box" />
+                                <div className="skeleton-box" />
+                                <div className="skeleton-box" />
+                                <div className="skeleton-box" />
+                                <div className="skeleton-box" />
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

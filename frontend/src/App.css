@@ -85,29 +85,109 @@
 }
 
 /* ──────────────────────────────────────── */
-/* ─ Budget Bar ─ */
+/* ─ City Tabs (terminal style) ─ */
 /* ──────────────────────────────────────── */
-.budget-bar {
+.city-tabs {
   display: flex;
-  align-items: flex-end;
-  gap: 20px;
-  padding: 14px 0;
+  gap: 0;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
 }
 
-.budget-field {
+.city-tab {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  padding: 10px 16px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  letter-spacing: 0.06em;
+}
+
+.city-tab:hover {
+  color: var(--text-secondary);
+  background: var(--bg-2);
+}
+
+.city-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+.city-tab-code {
+  pointer-events: none;
+}
+
+.skeleton-tab {
+  width: 50px;
+  height: 16px;
+  margin: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-3) 25%, var(--bg-2) 50%, var(--bg-3) 75%);
+  background-size: 800px 16px;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ──────────────────────────────────────── */
+/* ─ Dashboard Top Bar ─ */
+/* ──────────────────────────────────────── */
+.dash-topbar {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.budget-field label {
+.topbar-city {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.city-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.city-state {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Inline fields (label beside input) */
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-field label {
   font-size: var(--fs-xs);
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .input-with-prefix,
@@ -127,41 +207,22 @@
 
 .input-with-prefix .prefix,
 .input-with-suffix .suffix {
-  padding: 8px 10px;
-  font-size: var(--fs-base);
+  padding: 5px 8px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   background: var(--bg-3);
   flex-shrink: 0;
 }
 
-.budget-field input {
+.inline-field input {
   font-family: var(--font-mono);
-  font-size: var(--fs-base);
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: transparent;
   border: none;
-  padding: 8px 10px;
-  width: 110px;
-  outline: none;
-}
-
-.fee-field input {
+  padding: 5px 8px;
   width: 60px;
-}
-
-/* ──────────────────────────────────────── */
-/* ─ Hedge Meta ─ */
-/* ──────────────────────────────────────── */
-.hedge-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0 14px;
-}
-
-.hedge-meta {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
+  outline: none;
 }
 
 .hedge-error {
@@ -171,42 +232,15 @@
   background: var(--red-bg);
   border: 1px solid rgba(192, 85, 85, 0.25);
   border-radius: var(--radius);
-  margin-bottom: 12px;
+  margin: 8px 0;
 }
 
-/* ─ City Sections ─ */
-.city-sections {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-
-.city-section-header {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 6px 2px 10px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
-}
-
-.city-section-header h2 {
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.city-meta {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
+/* ─ City Dates ─ */
 .city-dates {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: 8px;
 }
 
 .hedge-cards {
@@ -649,12 +683,107 @@
   border-top: 1px solid var(--bg-3);
 }
 
-/* ─ Card Loading ─ */
-.card-loading {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  padding: 12px 0;
-  text-align: center;
+/* ──────────────────────────────────────── */
+/* ─ Loading Animations ─ */
+/* ──────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Pulsing dot in card header */
+.loading-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  margin-left: 4px;
+}
+
+/* Skeleton container */
+.card-skeleton {
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 10px;
+}
+
+.skeleton-bar {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-3) 25%, var(--bg-2) 50%, var(--bg-3) 75%);
+  background-size: 800px 14px;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skeleton-bar.w30 {
+  width: 30%;
+}
+
+.skeleton-bar.w40 {
+  width: 40%;
+}
+
+.skeleton-bar.w50 {
+  width: 50%;
+}
+
+.skeleton-bar.w60 {
+  width: 60%;
+}
+
+.skeleton-bar.w80 {
+  width: 80%;
+}
+
+.skeleton-summary {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.skeleton-box {
+  flex: 1;
+  height: 68px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--bg-3) 25%, var(--bg-2) 50%, var(--bg-3) 75%);
+  background-size: 800px 68px;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skeleton-pill {
+  width: 80px;
+  height: 28px;
+  border-radius: 100px;
+  background: linear-gradient(90deg, var(--bg-3) 25%, var(--bg-2) 50%, var(--bg-3) 75%);
+  background-size: 800px 28px;
+  animation: shimmer 1.8s ease-in-out infinite;
 }
 
 /* ──────────────────────────────────────── */
