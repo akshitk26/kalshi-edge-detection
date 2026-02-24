@@ -48,77 +48,88 @@ export default function App() {
   }, [sorted]);
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>AlphaCast</h1>
-        <nav className="app-tabs">
+    <div className="app-layout">
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <h1>AlphaCast</h1>
+        </div>
+
+        <nav className="sidebar-nav">
           <button
-            className={`tab-btn ${activeTab === "hedge" ? "active" : ""}`}
+            className={`sidebar-link ${activeTab === "hedge" ? "active" : ""}`}
             onClick={() => setActiveTab("hedge")}
           >
-            💰 Hedge
+            Hedge
           </button>
           <button
-            className={`tab-btn ${activeTab === "scanner" ? "active" : ""}`}
+            className={`sidebar-link ${activeTab === "scanner" ? "active" : ""}`}
             onClick={() => setActiveTab("scanner")}
           >
-            🔍 Scanner
+            Scanner
           </button>
         </nav>
-      </header>
 
-      {activeTab === "hedge" && <HedgeDashboard />}
+        <div className="sidebar-footer">
+          <span className="sidebar-version">v0.2</span>
+        </div>
+      </aside>
 
-      {activeTab === "scanner" && (
-        <>
-          <LookupBar
-            onResults={setLookupResults}
-            onClear={() => setLookupResults(null)}
-            hasResults={lookupResults !== null}
-          />
+      {/* Main content */}
+      <main className="main-content">
+        {activeTab === "hedge" && <HedgeDashboard />}
 
-          <FilterBar
-            markets={activeMarkets}
-            selectedCity={cityFilter}
-            selectedDate={dateFilter}
-            onCityChange={setCityFilter}
-            onDateChange={setDateFilter}
-            lastRefresh={lastRefresh}
-            onRefresh={refresh}
-            loading={loading}
-            priceSource={meta?.priceSource ?? ""}
-            paused={paused}
-            onTogglePause={togglePause}
-          />
+        {activeTab === "scanner" && (
+          <>
+            <LookupBar
+              onResults={setLookupResults}
+              onClear={() => setLookupResults(null)}
+              hasResults={lookupResults !== null}
+            />
 
-          <MarketTable
-            markets={sorted}
-            sort={sort}
-            onSort={toggleSort}
-            highestEdgeTicker={highestEdgeTicker}
-          />
+            <FilterBar
+              markets={activeMarkets}
+              selectedCity={cityFilter}
+              selectedDate={dateFilter}
+              onCityChange={setCityFilter}
+              onDateChange={setDateFilter}
+              lastRefresh={lastRefresh}
+              onRefresh={refresh}
+              loading={loading}
+              priceSource={meta?.priceSource ?? ""}
+              paused={paused}
+              onTogglePause={togglePause}
+            />
 
-          <StatusBar
-            total={activeMarkets.length}
-            filtered={sorted.length}
-            loading={loading}
-            error={error}
-          />
-          {lookupResults !== null && (
-            <div className="status-bar">
-              <span className="lookup-active-hint">
-                Showing lookup results ·{" "}
-                <button
-                  className="lookup-clear-inline"
-                  onClick={() => setLookupResults(null)}
-                >
-                  back to all markets
-                </button>
-              </span>
-            </div>
-          )}
-        </>
-      )}
+            <MarketTable
+              markets={sorted}
+              sort={sort}
+              onSort={toggleSort}
+              highestEdgeTicker={highestEdgeTicker}
+            />
+
+            <StatusBar
+              total={activeMarkets.length}
+              filtered={sorted.length}
+              loading={loading}
+              error={error}
+            />
+            {lookupResults !== null && (
+              <div className="status-bar">
+                <span className="lookup-active-hint">
+                  Showing lookup results ·{" "}
+                  <button
+                    className="lookup-clear-inline"
+                    onClick={() => setLookupResults(null)}
+                  >
+                    back to all markets
+                  </button>
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }

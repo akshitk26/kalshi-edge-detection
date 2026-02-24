@@ -1,4 +1,4 @@
-/* ── Edge Engine – Global Reset ── */
+/* ── AlphaCast – Global Reset ── */
 *,
 *::before,
 *::after {
@@ -14,25 +14,36 @@
   --bg-2: #1c2127;
   --bg-3: #252b33;
   --border: #2e353e;
-  --text-primary: #c9cdd3;
-  --text-secondary: #7d848d;
-  --text-muted: #555b63;
+  --text-primary: #d4d8de;
+  --text-secondary: #8e959e;
+  --text-muted: #5f666f;
   --green: #4a9e6e;
-  --green-bg: rgba(74, 158, 110, 0.08);
-  --red: #b35a5a;
-  --red-bg: rgba(179, 90, 90, 0.08);
+  --green-bg: rgba(74, 158, 110, 0.1);
+  --red: #c05555;
+  --red-bg: rgba(192, 85, 85, 0.1);
   --accent: #6b8aaf;
   --yellow: #c2a24d;
+  --yellow-bg: rgba(194, 162, 77, 0.1);
 
-  /* Typography */
+  /* Typography — bumped for readability */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code",
     monospace;
-  --fs-xs: 0.6875rem;   /* 11px */
-  --fs-sm: 0.75rem;     /* 12px */
-  --fs-base: 0.8125rem; /* 13px */
-  --fs-md: 0.875rem;    /* 14px */
+  --fs-xs: 0.75rem;
+  /* 12px */
+  --fs-sm: 0.8125rem;
+  /* 13px */
+  --fs-base: 0.875rem;
+  /* 14px */
+  --fs-md: 1rem;
+  /* 16px */
+  --fs-lg: 1.125rem;
+  /* 18px */
+
+  /* Spacing */
+  --radius: 6px;
+  --radius-sm: 4px;
 }
 
 html {
@@ -44,7 +55,7 @@ html {
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-base);
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-0);
   min-height: 100vh;
@@ -53,4 +64,3 @@ body {
 #root {
   width: 100%;
 }
-

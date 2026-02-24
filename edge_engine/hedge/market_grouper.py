@@ -192,9 +192,9 @@ class MarketGrouper:
 
             groups[group_id].buckets.append(bucket)
 
-        # Sort buckets within each group by YES price descending (most likely first)
+        # Sort buckets within each group by threshold value ascending (matches Kalshi order)
         for group in groups.values():
-            group.buckets.sort(key=lambda b: b.yes_price, reverse=True)
+            group.buckets.sort(key=lambda b: self._bucket_sort_key(b.range_label))
 
         # Sort groups by date, then city
         result = sorted(groups.values(), key=lambda g: (g.date, g.city))
@@ -225,3 +225,20 @@ class MarketGrouper:
             elif "above" in q or ">" in q:
                 return f"≥{int(val)}°"
             return f"{int(val)}°"
+
+    @staticmethod
+    def _bucket_sort_key(range_label: str) -> float:
+        """Extract a numeric sort key from a range label for ascending order.
+        
+        'or below' → sort first, 'or above' → sort last, otherwise use first number.
+        """
+        label = range_label.lower()
+        nums = re.findall(r"[\d.]+", label)
+        if not nums:
+            return 0.0
+        first_num = float(nums[0])
+        if "below" in label:
+            return first_num - 1000   # sort first
+        if "above" in label:
+            return first_num + 1000   # sort last
+        return first_num

@@ -39,14 +39,18 @@ export interface BucketAllocation {
   yesPrice: number;
   contracts: number;
   cost: number;
+  fees: number;
+  totalOutlay: number;
   profitIfNoWins: number;
   lossIfYesWins: number;
   included: boolean;
+  viable: boolean;
 }
 
 export interface Scenario {
   winningBucket: string;
   winningLabel: string;
+  probability: number;
   netPnl: number;
   isProfitable: boolean;
 }
@@ -57,11 +61,15 @@ export interface HedgeResult {
   feePerContract: number;
   totalCost: number;
   totalFees: number;
+  totalOutlay: number;
   expectedProfit: number;
   worstCasePnl: number;
   bestCasePnl: number;
   winProbability: number;
   totalContracts: number;
+  feeCostRatio: number;
+  quality: "good" | "fair" | "poor";
+  qualityReason: string;
   allocations: BucketAllocation[];
   scenarios: Scenario[];
 }
