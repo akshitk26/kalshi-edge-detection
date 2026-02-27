@@ -58,11 +58,23 @@ class WeatherClient:
         self.use_mock = self.config.get("use_mock", False)
         self.api_key = self.config.get("api_key") or os.getenv("OPENWEATHER_API_KEY")
         self._session = requests.Session()
+        
+        # Cache to prevent hitting rate limits (60/min) in the scanner
+        self._cache: dict[str, tuple[float, WeatherData | None]] = {}
+        self.cache_ttl = 600  # 10 minutes TTL
 
     def get_forecast(self, location: str, target_date: datetime) -> WeatherData | None:
         location = self._normalize_location(location)
         if self.use_mock:
             return self._get_mock_forecast(location, target_date)
+            
+        # Check cache
+        cache_key = f"{location}_{target_date.date().isoformat()}"
+        now = datetime.now(timezone.utc).timestamp()
+        if cache_key in self._cache:
+            cache_time, cached_data = self._cache[cache_key]
+            if now - cache_time < self.cache_ttl:
+                return cached_data
         
         # Special case: If target date is TODAY and late in day, forecast might not have data
         # Use current weather as best estimate
@@ -87,8 +99,11 @@ class WeatherClient:
                     fetched_at=datetime.now(timezone.utc),
                     current_temp_f=current_temp
                 )
+                self._cache[cache_key] = (now, f_data)
+                return f_data
         
         if not forecast_data:
+            self._cache[cache_key] = (now, None)  # Cache failures shortly too
             return None
 
         # 3. Fetch current observation if target is TODAY to enhance forecast
@@ -97,7 +112,7 @@ class WeatherClient:
             current_obs = self._fetch_current_temp(location)
 
         # 3. Combine into final object
-        return WeatherData(
+        final_data = WeatherData(
             location=forecast_data.location,
             forecast_date=forecast_data.forecast_date,
             high_temp_f=forecast_data.high_temp_f,
@@ -108,6 +123,10 @@ class WeatherClient:
             fetched_at=forecast_data.fetched_at,
             current_temp_f=current_obs
         )
+        
+        # Save to cache
+        self._cache[cache_key] = (now, final_data)
+        return final_data
 
     def _fetch_current_temp(self, location: str) -> float | None:
         coords = self.CITY_COORDS.get(location)

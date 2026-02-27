@@ -77,58 +77,59 @@ export default function App() {
 
       {/* Main content */}
       <main className="main-content">
-        {activeTab === "hedge" && <HedgeDashboard />}
+        {/* Keep both tabs mounted to preserve state, hide inactive with CSS */}
+        <div style={{ display: activeTab === "hedge" ? "block" : "none", height: "100%", overflowY: "auto" }}>
+          <HedgeDashboard />
+        </div>
 
-        {activeTab === "scanner" && (
-          <>
-            <LookupBar
-              onResults={setLookupResults}
-              onClear={() => setLookupResults(null)}
-              hasResults={lookupResults !== null}
-            />
+        <div style={{ display: activeTab === "scanner" ? "flex" : "none", flexDirection: "column", height: "100%", overflowY: "auto" }}>
+          <LookupBar
+            onResults={setLookupResults}
+            onClear={() => setLookupResults(null)}
+            hasResults={lookupResults !== null}
+          />
 
-            <FilterBar
-              markets={activeMarkets}
-              selectedCity={cityFilter}
-              selectedDate={dateFilter}
-              onCityChange={setCityFilter}
-              onDateChange={setDateFilter}
-              lastRefresh={lastRefresh}
-              onRefresh={refresh}
-              loading={loading}
-              priceSource={meta?.priceSource ?? ""}
-              paused={paused}
-              onTogglePause={togglePause}
-            />
+          <FilterBar
+            markets={activeMarkets}
+            selectedCity={cityFilter}
+            selectedDate={dateFilter}
+            onCityChange={setCityFilter}
+            onDateChange={setDateFilter}
+            lastRefresh={lastRefresh}
+            onRefresh={refresh}
+            loading={loading}
+            priceSource={meta?.priceSource ?? ""}
+            paused={paused}
+            onTogglePause={togglePause}
+          />
 
-            <MarketTable
-              markets={sorted}
-              sort={sort}
-              onSort={toggleSort}
-              highestEdgeTicker={highestEdgeTicker}
-            />
+          <MarketTable
+            markets={sorted}
+            sort={sort}
+            onSort={toggleSort}
+            highestEdgeTicker={highestEdgeTicker}
+          />
 
-            <StatusBar
-              total={activeMarkets.length}
-              filtered={sorted.length}
-              loading={loading}
-              error={error}
-            />
-            {lookupResults !== null && (
-              <div className="status-bar">
-                <span className="lookup-active-hint">
-                  Showing lookup results ·{" "}
-                  <button
-                    className="lookup-clear-inline"
-                    onClick={() => setLookupResults(null)}
-                  >
-                    back to all markets
-                  </button>
-                </span>
-              </div>
-            )}
-          </>
-        )}
+          <StatusBar
+            total={activeMarkets.length}
+            filtered={sorted.length}
+            loading={loading}
+            error={error}
+          />
+          {lookupResults !== null && (
+            <div className="status-bar">
+              <span className="lookup-active-hint">
+                Showing lookup results ·{" "}
+                <button
+                  className="lookup-clear-inline"
+                  onClick={() => setLookupResults(null)}
+                >
+                  back to all markets
+                </button>
+              </span>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

@@ -53,12 +53,21 @@ export function HedgeDashboard() {
         }
     }, [availableCities, selectedCity]);
 
-    const cityGroups = useMemo(() => {
-        if (!selectedCity) return [];
-        return groups
-            .filter(g => g.city === selectedCity)
-            .sort((a, b) => a.date.localeCompare(b.date));
-    }, [groups, selectedCity]);
+    // Group ALL groups by city (render all, hide non-selected with CSS)
+    const cityGroupsMap = useMemo(() => {
+        const map = new Map<string, typeof groups>();
+        for (const g of groups) {
+            const list = map.get(g.city) || [];
+            list.push(g);
+            map.set(g.city, list);
+        }
+        for (const [, list] of map) {
+            list.sort((a, b) => a.date.localeCompare(b.date));
+        }
+        return map;
+    }, [groups]);
+
+    const selectedCount = cityGroupsMap.get(selectedCity)?.length ?? 0;
 
     const handleBudgetBlur = () => {
         const val = parseFloat(budgetStr);
@@ -142,7 +151,7 @@ export function HedgeDashboard() {
                     </div>
 
                     <div className="topbar-meta">
-                        {cityGroups.length} date{cityGroups.length !== 1 ? "s" : ""}
+                        {selectedCount} date{selectedCount !== 1 ? "s" : ""}
                         {lastRefresh && (
                             <>
                                 {" · "}
@@ -162,24 +171,30 @@ export function HedgeDashboard() {
 
             {error && <div className="hedge-error">{error}</div>}
 
-            {!loading && cityGroups.length === 0 && selectedCity && (
+            {!loading && selectedCount === 0 && selectedCity && (
                 <div className="empty-state">
                     No markets found for {selectedCity}. Try another city.
                 </div>
             )}
 
-            {/* ── Date cards ── */}
-            <div className="city-dates">
-                {cityGroups.map((group) => (
-                    <HedgeGroupCard
-                        key={group.groupId}
-                        group={group}
-                        budget={budget}
-                        fee={fee}
-                        onCalculate={calculateAllocation}
-                    />
-                ))}
-            </div>
+            {/* ── Render ALL cities, hide non-selected (preserves state) ── */}
+            {Array.from(cityGroupsMap.entries()).map(([city, cityGroups]) => (
+                <div
+                    key={city}
+                    className="city-dates"
+                    style={{ display: city === selectedCity ? undefined : "none" }}
+                >
+                    {cityGroups.map((group) => (
+                        <HedgeGroupCard
+                            key={group.groupId}
+                            group={group}
+                            budget={budget}
+                            fee={fee}
+                            onCalculate={calculateAllocation}
+                        />
+                    ))}
+                </div>
+            ))}
         </div>
     );
 }

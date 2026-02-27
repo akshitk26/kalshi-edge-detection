@@ -91,8 +91,11 @@ class KalshiClient:
         self._session = requests.Session()
 
     def get_weather_markets(self) -> list[KalshiMarket]:
-        # [Simplified for brevity - keep your existing series list]
-        temp_series = ["KXHIGHNY", "KXHIGHCHI", "KXHIGHDEN", "KXHIGHTATL", "KXHIGHLAX"]
+        # Fetch markets for all supported cities
+        temp_series = [
+            "KXHIGHNY", "KXHIGHCHI", "KXHIGHDEN", "KXHIGHTATL", "KXHIGHLAX",
+            "KXHIGHMIA", "KXHIGHTBOS", "KXHIGHPHL", "KXHIGHPHX"
+        ]
         weather_markets = []
         for series in temp_series:
             weather_markets.extend(self._fetch_markets_by_series(series))

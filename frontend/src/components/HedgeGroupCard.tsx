@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { HedgeGroup, HedgeResult, BucketAllocation, Scenario } from "../types/hedge";
+import { ReturnDistributionChart } from "./ReturnDistributionChart";
 
 interface HedgeGroupCardProps {
     group: HedgeGroup;
@@ -362,6 +363,11 @@ export function HedgeGroupCard({
                                     </span>
                                 </div>
                             </div>
+
+                            <ReturnDistributionChart
+                                scenarios={result.scenarios}
+                                totalOutlay={result.totalOutlay}
+                            />
 
                             <button
                                 className="show-math-btn"
