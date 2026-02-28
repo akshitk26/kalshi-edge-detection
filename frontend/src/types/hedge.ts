@@ -55,6 +55,23 @@ export interface Scenario {
   isProfitable: boolean;
 }
 
+export interface ExitAnalysis {
+  ticker: string;
+  rangeLabel: string;
+  entryNoPrice: number;
+  exitNoPrice: number;
+  contracts: number;
+  exitTriggerYesProb: number;
+  numOtherBuckets: number;
+  profitPerOtherBucket: number;
+  profitFromOthers: number;
+  entryCost: number;
+  lossIfHeld: number;
+  lossIfExit: number;
+  netPnl: number;
+  improvement: number;
+}
+
 export interface HedgeResult {
   groupId: string;
   budget: number;
@@ -63,6 +80,9 @@ export interface HedgeResult {
   totalFees: number;
   totalOutlay: number;
   expectedProfit: number;
+  adjustedExpectedProfit?: number;
+  exitThreshold?: number;
+  exitAnalysis?: ExitAnalysis[];
   worstCasePnl: number;
   bestCasePnl: number;
   winProbability: number;

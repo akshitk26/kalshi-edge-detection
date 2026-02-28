@@ -2,6 +2,12 @@
 # =========================
 # Sensitive values are loaded from .env file (see .env.example)
 
+# Hedge calculator settings
+hedge:
+  exit_threshold: 0.65         # Exit NO position when YES probability exceeds this (0.65 = 65%)
+  enable_dynamic_exit: true    # Enable dynamic exit layer in EV calculations
+  default_fee: 0.011          # Default fee per contract in dollars
+
 # Kalshi API settings
 kalshi:
   base_url: "https://api.elections.kalshi.com/trade-api/v2"

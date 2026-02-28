@@ -16,29 +16,36 @@ interface ReturnDistributionChartProps {
     totalOutlay: number;
 }
 
-const NUM_SIMULATIONS = 100;
-const BIN_SIZE_PCT = 5; // Group returns into 5% buckets for a smoother histogram
+const NUM_SIMULATIONS = 2000;
+const BIN_SIZE_PCT = 3;
 
-function runSimulation(scenarios: Scenario[], outOf: number = 100) {
+function runSimulation(scenarios: Scenario[], outOf: number = 2000) {
     const results: number[] = [];
-
-    // Create a cumulative probability array for sampling
-    let cumulative = 0;
-    const cumProbs = scenarios.map(s => {
-        cumulative += s.probability;
-        return { ...s, cumProb: cumulative };
-    });
+    const variance = 0.4;
 
     for (let i = 0; i < outOf; i++) {
+        const noise = scenarios.map(() => (Math.random() - 0.5) * 2 * variance);
+        let variedProbs = scenarios.map((s, idx) => s.probability + noise[idx]);
+        variedProbs = variedProbs.map(p => Math.max(0.001, p));
+        const total = variedProbs.reduce((a, b) => a + b, 0);
+        variedProbs = variedProbs.map(p => p / total);
+        
+        let cumulative = 0;
+        const cumProbs = scenarios.map((s, idx) => {
+            cumulative += variedProbs[idx];
+            return { ...s, cumProb: cumulative };
+        });
+
         const rand = Math.random();
         const winningScenario = cumProbs.find(s => rand <= s.cumProb) || cumProbs[cumProbs.length - 1];
-        results.push(winningScenario.netPnl);
+        const randomPnlOffset = (Math.random() - 0.5) * (Math.abs(winningScenario.netPnl) * 0.15);
+        results.push(winningScenario.netPnl + randomPnlOffset);
     }
     return results;
 }
 
 export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistributionChartProps) {
-    const [simTrigger, setSimTrigger] = useState(0);
+    const [, setSimTrigger] = useState(0);
 
     const data = useMemo(() => {
         if (!totalOutlay || scenarios.length === 0) return [];
@@ -78,7 +85,7 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
 
         // 5. Sort by return bin (X-axis order)
         return chartData.sort((a, b) => a.returnBin - b.returnBin);
-    }, [scenarios, totalOutlay, simTrigger]);
+    }, [scenarios, totalOutlay]);
 
     if (data.length === 0) return null;
 
@@ -122,9 +129,9 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
                         <YAxis
                             tick={{ fontSize: 10, fill: "#5f666f" }}
                             tickFormatter={(val) => `${val}`} // Just frequency number
-                            label={{ value: 'Frequency (out of 100)', angle: -90, position: 'center', fill: "#5f666f", fontSize: 12, offset: 30 }}
+                            label={{ value: 'Frequency (out of 1000)', angle: -90, position: 'center', fill: "#5f666f", fontSize: 12, offset: 30 }}
                             stroke="#2e353e"
-                            domain={[0, 100]} // Always show 0 at bottom and 100 at top
+                            domain={[0, 1000]}
                             allowDataOverflow={false}
                             // Prevent axis from changing
                         />
@@ -137,8 +144,8 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
                                 color: "#d4d8de"
                             }}
                             cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                            formatter={(value: any) => {
-                                return [`${value}`, "Frequency"];
+                            formatter={(value) => {
+                                return [`${value ?? 0}`, "Frequency"];
                             }}
                             labelFormatter={(label) => `Return Range: ~${label}`}
                         />

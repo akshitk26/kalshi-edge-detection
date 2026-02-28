@@ -9,11 +9,11 @@
 
 :root {
   /* Palette */
-  --bg-0: #0f1114;
-  --bg-1: #161a1e;
-  --bg-2: #1c2127;
-  --bg-3: #252b33;
-  --border: #2e353e;
+  --bg-0: #08090b;
+  --bg-1: #0d1014;
+  --bg-2: #13171c;
+  --bg-3: #1c2026;
+  --border: #252b33;
   --text-primary: #d4d8de;
   --text-secondary: #8e959e;
   --text-muted: #5f666f;

@@ -6,11 +6,14 @@ interface HedgeGroupCardProps {
     group: HedgeGroup;
     budget: number;
     fee: number;
+    exitThreshold: number;
+    onExitThresholdChange: (value: number) => void;
     onCalculate: (
         groupId: string,
         budget: number,
         fee: number,
-        selected?: string[]
+        selected?: string[],
+        exitThreshold?: number
     ) => Promise<HedgeResult | null>;
 }
 
@@ -87,10 +90,14 @@ export function HedgeGroupCard({
     group,
     budget,
     fee,
+    exitThreshold,
+    onExitThresholdChange,
     onCalculate,
 }: HedgeGroupCardProps) {
     const [baseResult, setBaseResult] = useState<HedgeResult | null>(null);
     const [loading, setLoading] = useState(false);
+    const [exitLoading, setExitLoading] = useState(false);
+    const [exitInputValue, setExitInputValue] = useState(exitThreshold.toString());
     const [selected, setSelected] = useState<Set<string>>(
         new Set(group.buckets.map((b) => b.ticker))
     );
@@ -98,7 +105,7 @@ export function HedgeGroupCard({
     const [showMath, setShowMath] = useState(false);
     const [qtyOverrides, setQtyOverrides] = useState<Record<string, number>>({});
 
-    // Fetch base allocation from backend
+    // Fetch base allocation from backend (when budget, fee, or selection changes)
     useEffect(() => {
         if (budget <= 0) return;
         let cancelled = false;
@@ -109,7 +116,7 @@ export function HedgeGroupCard({
                 ? undefined
                 : Array.from(selected);
 
-        onCalculate(group.groupId, budget, fee, selectedArr).then((r) => {
+        onCalculate(group.groupId, budget, fee, selectedArr, exitThreshold).then((r) => {
             if (!cancelled) {
                 setBaseResult(r);
                 setQtyOverrides({}); // reset overrides when base changes
@@ -119,6 +126,41 @@ export function HedgeGroupCard({
 
         return () => { cancelled = true; };
     }, [budget, fee, selected, group.groupId, group.buckets.length, onCalculate]);
+
+    // Handle exit threshold changes separately (for inline loading)
+    const handleExitThresholdChange = useCallback((value: number) => {
+        onExitThresholdChange(value);
+        setExitInputValue(value.toString());
+        
+        if (budget <= 0) return;
+        let cancelled = false;
+        setExitLoading(true);
+
+        const selectedArr =
+            selected.size === group.buckets.length
+                ? undefined
+                : Array.from(selected);
+
+        onCalculate(group.groupId, budget, fee, selectedArr, value).then((r) => {
+            if (!cancelled) {
+                setBaseResult(r);
+                setExitLoading(false);
+            }
+        });
+
+        return () => { cancelled = true; };
+    }, [budget, fee, selected, group.groupId, onCalculate, onExitThresholdChange]);
+
+    const handleExitInputBlur = useCallback(() => {
+        const num = parseFloat(exitInputValue);
+        if (!isNaN(num)) {
+            const rounded = Math.round(num / 5) * 5;
+            const clamped = Math.max(30, Math.min(90, rounded));
+            handleExitThresholdChange(clamped / 100);
+        } else {
+            setExitInputValue(exitThreshold.toString());
+        }
+    }, [exitInputValue, exitThreshold, handleExitThresholdChange]);
 
     // Compute result: if user has overrides, recalculate locally
     const result = useMemo(() => {
@@ -337,6 +379,20 @@ export function HedgeGroupCard({
                                     </span>
                                     <span className="summary-sub">prob-weighted</span>
                                 </div>
+                                {result.adjustedExpectedProfit !== undefined && (
+                                    <div className="summary-item">
+                                        <span className="summary-label">Adj. EV (exit)</span>
+                                        <span
+                                            className={`summary-value ${result.adjustedExpectedProfit >= 0 ? "val-pos" : "val-neg"}`}
+                                        >
+                                            {result.adjustedExpectedProfit >= 0 ? "+" : ""}$
+                                            {result.adjustedExpectedProfit.toFixed(2)}
+                                        </span>
+                                        <span className="summary-sub">
+                                            {result.exitThreshold ? `exit @ ${(result.exitThreshold * 100).toFixed(0)}% YES` : "with dynamic exit"}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="summary-item">
                                     <span className="summary-label">Win Prob</span>
                                     <span className="summary-value">
@@ -363,6 +419,111 @@ export function HedgeGroupCard({
                                     </span>
                                 </div>
                             </div>
+
+                            {result.exitAnalysis && result.exitAnalysis.length > 0 && (
+                                <div className="exit-analysis-panel">
+                                    <div className="exit-header">
+                                        <div className="exit-header-text">
+                                            <h4 className="chart-title">Exit Threshold Analysis</h4>
+                                            <p className="exit-description">
+                                                If any bucket's YES probability exceeds {((result.exitThreshold || 0.65) * 100).toFixed(0)}%, 
+                                                we exit that position early to limit losses.
+                                            </p>
+                                        </div>
+                                        <div className="exit-slider-container">
+                                            <label className="exit-slider-label">
+                                                Exit @ <span className="exit-slider-value">{(exitThreshold * 100).toFixed(0)}%</span> YES
+                                            </label>
+                                            <div className="exit-input-slider-row">
+                                                <input
+                                                    type="text"
+                                                    className="exit-input"
+                                                    value={exitInputValue}
+                                                    onChange={(e) => setExitInputValue(e.target.value)}
+                                                    onBlur={handleExitInputBlur}
+                                                    onKeyDown={(e) => e.key === "Enter" && handleExitInputBlur()}
+                                                />
+                                                <div className="exit-slider-wrapper">
+                                                    <div 
+                                                        className="exit-slider-track"
+                                                        style={{ width: `${(exitThreshold - 0.3) / 0.6 * 100}%` }}
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min="0.30"
+                                                        max="0.90"
+                                                        step="0.05"
+                                                        value={exitThreshold}
+                                                        onChange={(e) => handleExitThresholdChange(parseFloat(e.target.value))}
+                                                        className="exit-slider"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="exit-slider-range">
+                                                <span>30%</span>
+                                                <span>90%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="exit-buckets">
+                                        {result.exitAnalysis.map((ea) => (
+                                            <div key={ea.ticker} className="exit-bucket-row">
+                                                <div className="exit-bucket-info">
+                                                    <span className="exit-bucket-label">{ea.rangeLabel}</span>
+                                                    <span className="exit-bucket-ticker">{ea.ticker}</span>
+                                                </div>
+                                                <div className="exit-bucket-stats">
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">
+                                                            Contracts
+                                                            {exitLoading && <span className="exit-spinner" />}
+                                                        </span>
+                                                        <span className="exit-stat-value">{ea.contracts}</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Entry NO</span>
+                                                        <span className="exit-stat-value">{ea.entryNoPrice}c</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Entry Cost</span>
+                                                        <span className="exit-stat-value">${ea.entryCost.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Loss if Held</span>
+                                                        <span className="exit-stat-value val-neg">${ea.lossIfHeld.toFixed(2)}</span>
+                                                        <span className="exit-stat-detail">full loss</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Loss if Exit</span>
+                                                        <span className="exit-stat-value val-neg">${ea.lossIfExit.toFixed(2)}</span>
+                                                        <span className="exit-stat-detail">@ {(ea.exitTriggerYesProb * 100).toFixed(0)}% YES</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Other Winners</span>
+                                                        <span className="exit-stat-value val-pos">
+                                                            {ea.numOtherBuckets} @ +${ea.profitPerOtherBucket.toFixed(2)}
+                                                        </span>
+                                                        <span className="exit-stat-detail">total: +${ea.profitFromOthers.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Net P&L</span>
+                                                        <span className={`exit-stat-value exit-stat-main ${ea.netPnl >= 0 ? "val-pos" : "val-neg"}`}>
+                                                            {ea.netPnl >= 0 ? "+" : ""}${ea.netPnl.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="exit-stat">
+                                                        <span className="exit-stat-label">Saved</span>
+                                                        <span className={`exit-stat-value ${ea.improvement >= 0 ? "val-pos" : "val-neg"}`}>
+                                                            +${ea.improvement.toFixed(2)}
+                                                        </span>
+                                                        <span className="exit-stat-detail">vs holding</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <ReturnDistributionChart
                                 scenarios={result.scenarios}

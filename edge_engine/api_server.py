@@ -109,6 +109,7 @@ def get_markets():
             markets = []
             for s in series_list:
                 from edge_engine.analyze_market import fetch_series_markets
+
                 markets.extend(fetch_series_markets(_kalshi_client, s))
         else:
             markets = _kalshi_client.get_weather_markets()
@@ -123,14 +124,16 @@ def get_markets():
         # Sort by absolute edge descending
         results.sort(key=lambda r: abs(r["edge"]), reverse=True)
 
-        return jsonify({
-            "markets": results,
-            "meta": {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "count": len(results),
-                "priceSource": _kalshi_client.price_source,
-            },
-        })
+        return jsonify(
+            {
+                "markets": results,
+                "meta": {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "count": len(results),
+                    "priceSource": _kalshi_client.price_source,
+                },
+            }
+        )
 
     except Exception as e:
         _logger.error(f"API error: {e}", exc_info=True)
@@ -142,6 +145,7 @@ def get_market(ticker: str):
     """Fetch and analyze a single market by ticker."""
     try:
         from edge_engine.analyze_market import fetch_single_market
+
         market = fetch_single_market(_kalshi_client, ticker.upper())
         if not market:
             return jsonify({"error": f"Market {ticker} not found"}), 404
@@ -184,9 +188,17 @@ def lookup_market():
             return jsonify({"error": f"Could not parse: {q}"}), 400
 
         # Fetch markets
-        if market_ticker and "-" in market_ticker and len(market_ticker.split("-")) >= 2:
+        if (
+            market_ticker
+            and "-" in market_ticker
+            and len(market_ticker.split("-")) >= 2
+        ):
             markets = fetch_series_markets(_kalshi_client, series_ticker)
-            markets = [m for m in markets if m.market_id.upper().startswith(market_ticker.upper())]
+            markets = [
+                m
+                for m in markets
+                if m.market_id.upper().startswith(market_ticker.upper())
+            ]
             if not markets:
                 market = fetch_single_market(_kalshi_client, market_ticker)
                 markets = [market] if market else []
@@ -204,15 +216,17 @@ def lookup_market():
 
         results.sort(key=lambda r: abs(r["edge"]), reverse=True)
 
-        return jsonify({
-            "markets": results,
-            "meta": {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "count": len(results),
-                "priceSource": _kalshi_client.price_source,
-                "query": q,
-            },
-        })
+        return jsonify(
+            {
+                "markets": results,
+                "meta": {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "count": len(results),
+                    "priceSource": _kalshi_client.price_source,
+                    "query": q,
+                },
+            }
+        )
 
     except Exception as e:
         _logger.error(f"Lookup error: {e}", exc_info=True)
@@ -220,6 +234,7 @@ def lookup_market():
 
 
 # ─── Hedge Group Endpoints ───────────────────────────────────────────
+
 
 @app.route("/api/hedge-groups", methods=["GET"])
 def get_hedge_groups():
@@ -237,21 +252,24 @@ def get_hedge_groups():
             markets = []
             for s in series_list:
                 from edge_engine.analyze_market import fetch_series_markets
+
                 markets.extend(fetch_series_markets(_kalshi_client, s))
         else:
             markets = _kalshi_client.get_weather_markets()
 
         groups = _market_grouper.group_markets(markets)
 
-        return jsonify({
-            "groups": [g.to_dict() for g in groups],
-            "meta": {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "count": len(groups),
-                "totalMarkets": len(markets),
-                "priceSource": _kalshi_client.price_source,
-            },
-        })
+        return jsonify(
+            {
+                "groups": [g.to_dict() for g in groups],
+                "meta": {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "count": len(groups),
+                    "totalMarkets": len(markets),
+                    "priceSource": _kalshi_client.price_source,
+                },
+            }
+        )
 
     except Exception as e:
         _logger.error(f"Hedge groups error: {e}", exc_info=True)
@@ -267,6 +285,7 @@ def calculate_hedge(group_id: str):
         budget: budget in dollars (required)
         fee: fee per contract in dollars (optional, default 0.011)
         selected: comma-separated tickers to include (optional, default all)
+        exitThreshold: exit threshold as YES probability (optional, 0.0-1.0, default from config)
     """
     try:
         budget_str = request.args.get("budget")
@@ -276,12 +295,31 @@ def calculate_hedge(group_id: str):
         try:
             budget = float(budget_str)
         except ValueError:
-            return jsonify({"error": f"Invalid budget: {budget_str}"}), 400
+            return jsonify({"error": "Invalid budget: {budget_str}"}), 400
 
         if budget <= 0:
             return jsonify({"error": "Budget must be positive"}), 400
 
         fee = float(request.args.get("fee", "0.011"))
+
+        exit_threshold_str = request.args.get("exitThreshold")
+        exit_threshold = None
+        if exit_threshold_str:
+            try:
+                exit_threshold = float(exit_threshold_str)
+                if not (0 < exit_threshold < 1):
+                    return (
+                        jsonify({"error": "exitThreshold must be between 0 and 1"}),
+                        400,
+                    )
+            except ValueError:
+                return jsonify({"error": "Invalid exitThreshold"}), 400
+
+        # Build config with exit threshold override if provided
+        config = dict(_config) if _config else {}
+        if exit_threshold is not None:
+            config.setdefault("hedge", {})["exit_threshold"] = exit_threshold
+
         selected_param = request.args.get("selected", "")
         selected_tickers = (
             [s.strip().upper() for s in selected_param.split(",") if s.strip()]
@@ -303,13 +341,15 @@ def calculate_hedge(group_id: str):
             return jsonify({"error": f"Group {group_id} not found"}), 404
 
         result = _hedge_calculator.calculate(
-            target_group, budget, fee, selected_tickers
+            target_group, budget, fee, selected_tickers, config
         )
 
-        return jsonify({
-            "allocation": result.to_dict(),
-            "group": target_group.to_dict(),
-        })
+        return jsonify(
+            {
+                "allocation": result.to_dict(),
+                "group": target_group.to_dict(),
+            }
+        )
 
     except Exception as e:
         _logger.error(f"Hedge calculate error: {e}", exc_info=True)
@@ -318,7 +358,9 @@ def calculate_hedge(group_id: str):
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return jsonify(
+        {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
 def main():

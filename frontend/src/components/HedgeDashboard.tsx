@@ -5,6 +5,7 @@ import { HedgeGroupCard } from "./HedgeGroupCard";
 const LS_BUDGET = "alphacast_budget";
 const LS_FEE = "alphacast_fee";
 const LS_CITY = "alphacast_city";
+const LS_EXIT_THRESHOLD = "alphacast_exit_threshold";
 
 /** City → state + short code. */
 const CITIES: Record<string, { state: string; code: string }> = {
@@ -34,12 +35,17 @@ export function HedgeDashboard() {
     const [selectedCity, setSelectedCity] = useState(() => {
         return localStorage.getItem(LS_CITY) || "";
     });
+    const [exitThreshold, setExitThreshold] = useState(() => {
+        const saved = localStorage.getItem(LS_EXIT_THRESHOLD);
+        return saved ? parseFloat(saved) : 0.65;
+    });
     const [budgetStr, setBudgetStr] = useState(budget.toString());
     const [feeStr, setFeeStr] = useState((fee * 100).toFixed(1));
 
     useEffect(() => { localStorage.setItem(LS_BUDGET, budget.toString()); }, [budget]);
     useEffect(() => { localStorage.setItem(LS_FEE, fee.toString()); }, [fee]);
     useEffect(() => { localStorage.setItem(LS_CITY, selectedCity); }, [selectedCity]);
+    useEffect(() => { localStorage.setItem(LS_EXIT_THRESHOLD, exitThreshold.toString()); }, [exitThreshold]);
     useEffect(() => { setBudgetStr(budget.toString()); }, [budget]);
 
     const availableCities = useMemo(() => {
@@ -190,6 +196,8 @@ export function HedgeDashboard() {
                             group={group}
                             budget={budget}
                             fee={fee}
+                            exitThreshold={exitThreshold}
+                            onExitThresholdChange={setExitThreshold}
                             onCalculate={calculateAllocation}
                         />
                     ))}

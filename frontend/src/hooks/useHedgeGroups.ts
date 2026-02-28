@@ -19,7 +19,8 @@ interface UseHedgeGroupsResult {
         groupId: string,
         budget: number,
         fee: number,
-        selectedTickers?: string[]
+        selectedTickers?: string[],
+        exitThreshold?: number
     ) => Promise<HedgeResult | null>;
 }
 
@@ -55,7 +56,8 @@ export function useHedgeGroups(): UseHedgeGroupsResult {
             groupId: string,
             budget: number,
             fee: number,
-            selectedTickers?: string[]
+            selectedTickers?: string[],
+            exitThreshold?: number
         ): Promise<HedgeResult | null> => {
             try {
                 const params = new URLSearchParams({
@@ -64,6 +66,9 @@ export function useHedgeGroups(): UseHedgeGroupsResult {
                 });
                 if (selectedTickers && selectedTickers.length > 0) {
                     params.set("selected", selectedTickers.join(","));
+                }
+                if (exitThreshold !== undefined) {
+                    params.set("exitThreshold", exitThreshold.toString());
                 }
                 const res = await fetch(
                     `${API_BASE}/hedge-groups/${groupId}/calculate?${params}`

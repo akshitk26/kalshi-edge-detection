@@ -19,10 +19,11 @@ logger = get_logger("edge_engine.hedge.market_grouper")
 @dataclass
 class BucketInfo:
     """One bucket within a hedge group."""
+
     ticker: str
-    range_label: str         # e.g., "30° to 31°", "≤27°", "≥36°"
-    yes_price: int           # cents (what you'd pay for YES)
-    no_price: int            # cents (what you'd pay for NO = NO ask)
+    range_label: str  # e.g., "30° to 31°", "≤27°", "≥36°"
+    yes_price: int  # cents (what you'd pay for YES)
+    no_price: int  # cents (what you'd pay for NO = NO ask)
     yes_bid: int
     yes_ask: int
     no_bid: int
@@ -47,10 +48,11 @@ class BucketInfo:
 @dataclass
 class HedgeGroup:
     """A group of mutually exclusive buckets for one city-date."""
-    group_id: str            # e.g., "KXHIGHNY-26FEB24"
+
+    group_id: str  # e.g., "KXHIGHNY-26FEB24"
     city: str
-    date: str                # e.g., "26FEB24"
-    market_type: str         # "high" or "low"
+    date: str  # e.g., "26FEB24"
+    market_type: str  # "high" or "low"
     buckets: list[BucketInfo] = field(default_factory=list)
 
     @property
@@ -121,10 +123,18 @@ class MarketGrouper:
 
     # City code mapping (reuses KalshiClient's logic)
     CITY_MAP = {
-        "NY": "New York", "CHI": "Chicago", "LAX": "Los Angeles",
-        "LA": "Los Angeles", "MIA": "Miami", "BOS": "Boston",
-        "DEN": "Denver", "ATL": "Atlanta", "PHL": "Philadelphia",
-        "PHX": "Phoenix", "TATL": "Atlanta", "TBOS": "Boston",
+        "NY": "New York",
+        "CHI": "Chicago",
+        "LAX": "Los Angeles",
+        "LA": "Los Angeles",
+        "MIA": "Miami",
+        "BOS": "Boston",
+        "DEN": "Denver",
+        "ATL": "Atlanta",
+        "PHL": "Philadelphia",
+        "PHX": "Phoenix",
+        "TATL": "Atlanta",
+        "TBOS": "Boston",
     }
 
     # Pattern: KXHIGH<CITY>-<DATE>-<BUCKET_OR_THRESHOLD>
@@ -150,11 +160,11 @@ class MarketGrouper:
                 logger.debug(f"Skipping non-matching ticker: {market.market_id}")
                 continue
 
-            high_low = match.group(1).lower()   # "high" or "low"
+            high_low = match.group(1).lower()  # "high" or "low"
             city_code = match.group(2)
-            date_str = match.group(3)           # e.g., "26FEB24"
-            bucket_or_thresh = match.group(4)   # "B" or "T"
-            value = match.group(5)              # e.g., "46.5" or "40"
+            date_str = match.group(3)  # e.g., "26FEB24"
+            bucket_or_thresh = match.group(4)  # "B" or "T"
+            value = match.group(5)  # e.g., "46.5" or "40"
 
             city = self.CITY_MAP.get(city_code, city_code)
             series = f"KX{match.group(1)}{city_code}"
@@ -209,7 +219,9 @@ class MarketGrouper:
 
         # Try to extract from subtitle/question first
         # Common patterns: "28° to 29°", "27° or below", "36° or above"
-        range_match = re.search(r"(\d+°?\s*(to|or\s+below|or\s+above|and\s+above)\s*\d*°?)", q)
+        range_match = re.search(
+            r"(\d+°?\s*(to|or\s+below|or\s+above|and\s+above)\s*\d*°?)", q
+        )
         if range_match:
             return range_match.group(1).strip()
 
@@ -229,7 +241,7 @@ class MarketGrouper:
     @staticmethod
     def _bucket_sort_key(range_label: str) -> float:
         """Extract a numeric sort key from a range label for ascending order.
-        
+
         'or below' → sort first, 'or above' → sort last, otherwise use first number.
         """
         label = range_label.lower()
@@ -238,7 +250,7 @@ class MarketGrouper:
             return 0.0
         first_num = float(nums[0])
         if "below" in label:
-            return first_num - 1000   # sort first
+            return first_num - 1000  # sort first
         if "above" in label:
-            return first_num + 1000   # sort last
+            return first_num + 1000  # sort last
         return first_num
