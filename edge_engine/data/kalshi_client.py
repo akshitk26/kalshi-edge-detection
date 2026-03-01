@@ -2,16 +2,28 @@
 Kalshi Market Data Client - Fixed Parsing
 """
 
+import base64
 import os
 import re
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
 from edge_engine.utils.logging_setup import get_logger
 
 logger = get_logger("edge_engine.data.kalshi")
+
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+    HAS_CRYPTO = True
+except ImportError:
+    HAS_CRYPTO = False
+    logger.warning("cryptography not installed — portfolio features disabled")
 
 
 @dataclass(frozen=True)
@@ -99,6 +111,128 @@ class KalshiClient:
         self.use_mock = self.config.get("use_mock", False)
         self.price_source = self.config.get("price_source", "last_price")
         self._session = requests.Session()
+
+        self._api_key_id: str | None = self.config.get("api_key_id")
+        self._private_key = None
+        key_path = self.config.get("private_key_path")
+        if key_path and HAS_CRYPTO:
+            self._private_key = self._load_private_key(key_path)
+            if self._private_key:
+                logger.info("Kalshi API key loaded — portfolio features enabled")
+
+    @property
+    def has_auth(self) -> bool:
+        return self._api_key_id is not None and self._private_key is not None
+
+    @staticmethod
+    def _load_private_key(path: str):
+        """Load RSA private key from PEM file."""
+        try:
+            key_path = Path(path).expanduser()
+            pem_data = key_path.read_bytes()
+            return serialization.load_pem_private_key(pem_data, password=None)
+        except Exception as e:
+            logger.error(f"Failed to load private key from {path}: {e}")
+            return None
+
+    def _sign_request(self, method: str, path: str) -> dict[str, str]:
+        """Generate RSA-PSS auth headers for an authenticated request."""
+        if not self.has_auth:
+            raise RuntimeError("API key not configured")
+
+        timestamp_ms = str(int(time.time() * 1000))
+        message = f"{timestamp_ms}{method}{path}"
+        signature = self._private_key.sign(
+            message.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+
+        return {
+            "KALSHI-ACCESS-KEY": self._api_key_id,
+            "KALSHI-ACCESS-TIMESTAMP": timestamp_ms,
+            "KALSHI-ACCESS-SIGNATURE": base64.b64encode(signature).decode(),
+        }
+
+    def _authenticated_get(self, path: str, params: dict | None = None) -> dict:
+        """Perform an authenticated GET request to the Kalshi API."""
+        headers = self._sign_request("GET", f"/trade-api/v2{path}")
+        resp = self._session.get(
+            f"{self.base_url}{path}", headers=headers, params=params
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_balance(self) -> dict[str, Any]:
+        """Fetch account balance and portfolio value (in cents)."""
+        data = self._authenticated_get("/portfolio/balance")
+        return {
+            "balance": data.get("balance", 0),
+            "portfolio_value": data.get("portfolio_value", 0),
+            "total_value": data.get("balance", 0) + data.get("portfolio_value", 0),
+            "updated_ts": data.get("updated_ts", 0),
+        }
+
+    def get_positions(self) -> list[dict[str, Any]]:
+        """Fetch all open market positions with pagination."""
+        all_positions: list[dict[str, Any]] = []
+        cursor = ""
+        while True:
+            params: dict[str, Any] = {
+                "limit": 200,
+                "count_filter": "position",
+            }
+            if cursor:
+                params["cursor"] = cursor
+            data = self._authenticated_get("/portfolio/positions", params)
+            for mp in data.get("market_positions", []):
+                all_positions.append({
+                    "ticker": mp.get("ticker", ""),
+                    "position": mp.get("position", 0),
+                    "market_exposure": mp.get("market_exposure", 0),
+                    "market_exposure_dollars": mp.get("market_exposure_dollars", "0"),
+                    "realized_pnl": mp.get("realized_pnl", 0),
+                    "realized_pnl_dollars": mp.get("realized_pnl_dollars", "0"),
+                    "fees_paid": mp.get("fees_paid", 0),
+                    "total_traded": mp.get("total_traded", 0),
+                })
+            cursor = data.get("cursor", "")
+            if not cursor:
+                break
+        return all_positions
+
+    def get_fills(self) -> list[dict[str, Any]]:
+        """Fetch all trade fills (every matched trade) with pagination."""
+        all_fills: list[dict[str, Any]] = []
+        cursor = ""
+        while True:
+            params: dict[str, Any] = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            data = self._authenticated_get("/portfolio/fills", params)
+            all_fills.extend(data.get("fills", []))
+            cursor = data.get("cursor", "")
+            if not cursor:
+                break
+        return all_fills
+
+    def get_settlements(self) -> list[dict[str, Any]]:
+        """Fetch all settlement records with pagination."""
+        all_settlements: list[dict[str, Any]] = []
+        cursor = ""
+        while True:
+            params: dict[str, Any] = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            data = self._authenticated_get("/portfolio/settlements", params)
+            all_settlements.extend(data.get("settlements", []))
+            cursor = data.get("cursor", "")
+            if not cursor:
+                break
+        return all_settlements
 
     def get_weather_markets(self) -> list[KalshiMarket]:
         # Fetch markets for all supported cities

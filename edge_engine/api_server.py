@@ -6,8 +6,13 @@ Serves market analysis data as JSON for the frontend UI.
 Run: python -m edge_engine.api_server
 """
 
+import json
 import sys
+import threading
+import time
 from datetime import datetime, timezone
+from pathlib import Path
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -356,6 +361,232 @@ def calculate_hedge(group_id: str):
         return jsonify({"error": str(e)}), 500
 
 
+# ─── Portfolio History Reconstruction ────────────────────────────────
+
+HISTORY_CACHE_FILE = Path(__file__).parent / "portfolio_history_cache.json"
+_history_cache: list[dict] | None = None
+_history_lock = threading.Lock()
+
+
+def _reconstruct_portfolio_history() -> list[dict]:
+    """
+    Reconstruct portfolio value timeline from fills + settlements.
+
+    Uses position tracking with the correct Kalshi price model:
+    - BUY fills: cash out = count * side_price + fee, position gained
+    - SELL fills: realized P&L = (count * opposite_side_price) - cost_basis - fee
+      The ``side`` field indicates the order-book side, so closing a NO
+      position appears as side=yes,action=sell.  The user receives
+      ``no_price`` (the opposite side) per contract in that case.
+    - Settlements: realized P&L = revenue - remaining cost basis
+
+    Total value at each point = initial_deposit + cumulative realized P&L.
+    Initial deposit is derived from the Model-C cash-flow identity.
+    """
+    global _history_cache
+
+    with _history_lock:
+        if _history_cache is not None:
+            return _history_cache
+
+    fills = _kalshi_client.get_fills()
+    settlements = _kalshi_client.get_settlements()
+    balance_info = _kalshi_client.get_balance()
+    current_total = balance_info["total_value"]
+
+    # --- Derive initial deposit using Model C cash-flow identity ---
+    total_out = 0
+    total_in = 0
+    for f in fills:
+        side = f.get("side", "")
+        action = f.get("action", "")
+        count = f.get("count", 0)
+        yp = f.get("yes_price", 0)
+        np_ = f.get("no_price", 0)
+        fee = round(float(f.get("fee_cost", "0")) * 100)
+        if action == "buy":
+            price = np_ if side == "no" else yp
+            total_out += count * price + fee
+        else:
+            price = np_ if side == "yes" else yp
+            total_in += count * price - fee
+    for s in settlements:
+        total_in += s.get("revenue", 0)
+
+    initial_value = current_total - (total_in - total_out)
+
+    # --- Build event list with position-tracked deltas ---
+    events: list[dict] = []
+
+    for f in fills:
+        events.append({
+            "ts": f.get("created_time") or "",
+            "type": "fill",
+            "fill": f,
+        })
+
+    for s in settlements:
+        events.append({
+            "ts": s.get("settled_time", ""),
+            "type": "settlement",
+            "settlement": s,
+        })
+
+    if not events:
+        return []
+
+    events.sort(key=lambda e: e["ts"])
+
+    from collections import defaultdict
+    positions: dict[str, dict] = defaultdict(lambda: {"count": 0, "total_cost": 0})
+    running_value = initial_value
+    snapshots: list[dict] = []
+
+    first_ts = events[0]["ts"]
+    if first_ts:
+        try:
+            first_dt = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
+            snapshots.append({
+                "ts": first_dt.replace(second=0, microsecond=0).isoformat(),
+                "epoch": int(first_dt.timestamp()) - 1,
+                "total_value": initial_value,
+                "event": "initial",
+            })
+        except Exception:
+            pass
+
+    for ev in events:
+        if ev["type"] == "fill":
+            f = ev["fill"]
+            side = f.get("side", "")
+            action = f.get("action", "")
+            count = f.get("count", 0)
+            yp = f.get("yes_price", 0)
+            np_ = f.get("no_price", 0)
+            fee = round(float(f.get("fee_cost", "0")) * 100)
+            ticker = f.get("ticker", "")
+
+            if action == "buy":
+                buy_price = np_ if side == "no" else yp
+                positions[ticker]["count"] += count
+                positions[ticker]["total_cost"] += count * buy_price
+                delta = -fee
+            else:
+                received_per = np_ if side == "yes" else yp
+                pos = positions[ticker]
+                if pos["count"] > 0:
+                    avg_cost = pos["total_cost"] / pos["count"]
+                    cost_basis = avg_cost * count
+                else:
+                    cost_basis = 0
+                received = count * received_per
+                delta = round(received - cost_basis - fee)
+                positions[ticker]["count"] -= count
+                positions[ticker]["total_cost"] -= round(cost_basis)
+
+        elif ev["type"] == "settlement":
+            s = ev["settlement"]
+            ticker = s.get("ticker", "")
+            revenue = s.get("revenue", 0)
+            cost_basis = positions[ticker]["total_cost"]
+            delta = revenue - cost_basis
+            positions[ticker] = {"count": 0, "total_cost": 0}
+
+        else:
+            delta = 0
+
+        running_value += delta
+
+        try:
+            dt = datetime.fromisoformat(ev["ts"].replace("Z", "+00:00"))
+            epoch = int(dt.timestamp())
+        except Exception:
+            continue
+
+        snapshots.append({
+            "ts": dt.isoformat(),
+            "epoch": epoch,
+            "total_value": running_value,
+            "event": ev["type"],
+        })
+
+    snapshots.append({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "epoch": int(time.time()),
+        "total_value": current_total,
+        "event": "current",
+    })
+
+    with _history_lock:
+        _history_cache = snapshots
+    try:
+        HISTORY_CACHE_FILE.write_text(json.dumps(snapshots))
+    except Exception:
+        pass
+
+    return snapshots
+
+
+def _try_load_cached_history() -> list[dict] | None:
+    try:
+        if HISTORY_CACHE_FILE.exists():
+            return json.loads(HISTORY_CACHE_FILE.read_text())
+    except Exception:
+        pass
+    return None
+
+
+# ─── Portfolio Endpoints ─────────────────────────────────────────────
+
+
+@app.route("/api/portfolio/status", methods=["GET"])
+def portfolio_status():
+    """Check if portfolio features are available (API key configured)."""
+    configured = _kalshi_client is not None and _kalshi_client.has_auth
+    return jsonify({"configured": configured})
+
+
+@app.route("/api/portfolio/balance", methods=["GET"])
+def portfolio_balance():
+    """Fetch current balance, portfolio value, and positions."""
+    if not _kalshi_client or not _kalshi_client.has_auth:
+        return jsonify({"error": "API key not configured"}), 401
+    try:
+        balance = _kalshi_client.get_balance()
+        positions = _kalshi_client.get_positions()
+        return jsonify({
+            "balance": balance,
+            "positions": positions,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        _logger.error(f"Portfolio balance error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/portfolio/history", methods=["GET"])
+def portfolio_history():
+    """Return reconstructed portfolio value timeline from fills/settlements."""
+    if not _kalshi_client or not _kalshi_client.has_auth:
+        return jsonify({"error": "API key not configured"}), 401
+    try:
+        refresh = request.args.get("refresh", "").lower() == "true"
+        if refresh:
+            global _history_cache
+            with _history_lock:
+                _history_cache = None
+
+        snapshots = _reconstruct_portfolio_history()
+
+        return jsonify({
+            "snapshots": snapshots,
+            "count": len(snapshots),
+        })
+    except Exception as e:
+        _logger.error(f"Portfolio history error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify(
@@ -367,6 +598,12 @@ def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5050
     _init_clients()
     _logger.info(f"Starting API server on port {port}")
+
+    if _kalshi_client and _kalshi_client.has_auth:
+        _logger.info("Portfolio auth detected — portfolio features enabled")
+    else:
+        _logger.info("No Kalshi API key — portfolio features disabled")
+
     app.run(host="0.0.0.0", port=port, debug=False)
 
 

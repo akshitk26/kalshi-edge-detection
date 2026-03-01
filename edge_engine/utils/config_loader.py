@@ -52,6 +52,14 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
     if os.getenv("KALSHI_PASSWORD"):
         config.setdefault("kalshi", {})["password"] = os.getenv("KALSHI_PASSWORD")
 
+    if os.getenv("KALSHI_API_KEY_ID"):
+        config.setdefault("kalshi", {})["api_key_id"] = os.getenv("KALSHI_API_KEY_ID")
+
+    if os.getenv("KALSHI_PRIVATE_KEY_PATH"):
+        config.setdefault("kalshi", {})["private_key_path"] = os.getenv(
+            "KALSHI_PRIVATE_KEY_PATH"
+        )
+
     if os.getenv("OPENWEATHER_API_KEY"):
         config.setdefault("weather", {})["api_key"] = os.getenv("OPENWEATHER_API_KEY")
 

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { HedgeGroup, HedgeResult, BucketAllocation, Scenario } from "../types/hedge";
+import { ExitYesBar } from "./ExitYesBar";
 import { ReturnDistributionChart } from "./ReturnDistributionChart";
 
 interface HedgeGroupCardProps {
@@ -97,13 +98,30 @@ export function HedgeGroupCard({
     const [baseResult, setBaseResult] = useState<HedgeResult | null>(null);
     const [loading, setLoading] = useState(false);
     const [exitLoading, setExitLoading] = useState(false);
-    const [exitInputValue, setExitInputValue] = useState(exitThreshold.toString());
+    const [localExitThreshold, setLocalExitThreshold] = useState(exitThreshold);
+    const [exitInputValue, setExitInputValue] = useState(String(Math.round(exitThreshold * 100)));
+    const exitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [selected, setSelected] = useState<Set<string>>(
         new Set(group.buckets.map((b) => b.ticker))
     );
     const [expanded, setExpanded] = useState(false);
     const [showMath, setShowMath] = useState(false);
+    const [showDistribution, setShowDistribution] = useState(false);
     const [qtyOverrides, setQtyOverrides] = useState<Record<string, number>>({});
+    const [editingQtyTicker, setEditingQtyTicker] = useState<string | null>(null);
+    const [editingQtyValue, setEditingQtyValue] = useState("");
+    const [selectedExitBucketTicker, setSelectedExitBucketTicker] = useState<string | null>(null);
+
+    // Auto-select first exit bucket when exit analysis appears
+    useEffect(() => {
+        const list = baseResult?.exitAnalysis;
+        if (!list || list.length === 0) return;
+        const tickers = new Set(list.map((ea) => ea.ticker));
+        setSelectedExitBucketTicker((prev) => {
+            if (prev == null || !tickers.has(prev)) return list[0].ticker;
+            return prev;
+        });
+    }, [baseResult?.exitAnalysis]);
 
     // Fetch base allocation from backend (when budget, fee, or selection changes)
     useEffect(() => {
@@ -127,13 +145,17 @@ export function HedgeGroupCard({
         return () => { cancelled = true; };
     }, [budget, fee, selected, group.groupId, group.buckets.length, onCalculate]);
 
-    // Handle exit threshold changes separately (for inline loading)
-    const handleExitThresholdChange = useCallback((value: number) => {
-        onExitThresholdChange(value);
-        setExitInputValue(value.toString());
-        
+    // Sync local state when prop changes externally (e.g. from another card)
+    useEffect(() => {
+        setLocalExitThreshold(exitThreshold);
+        setExitInputValue(String(Math.round(exitThreshold * 100)));
+    }, [exitThreshold]);
+
+    // Fire API call (debounced) when threshold settles
+    const commitExitThreshold = useCallback((value: number) => {
+        const clamped = Math.max(0.01, Math.min(0.99, value));
+        onExitThresholdChange(clamped);
         if (budget <= 0) return;
-        let cancelled = false;
         setExitLoading(true);
 
         const selectedArr =
@@ -141,26 +163,40 @@ export function HedgeGroupCard({
                 ? undefined
                 : Array.from(selected);
 
-        onCalculate(group.groupId, budget, fee, selectedArr, value).then((r) => {
-            if (!cancelled) {
-                setBaseResult(r);
-                setExitLoading(false);
-            }
+        onCalculate(group.groupId, budget, fee, selectedArr, clamped).then((r) => {
+            if (r) setBaseResult(r);
+            setExitLoading(false);
         });
+    }, [budget, fee, selected, group.groupId, group.buckets.length, onCalculate, onExitThresholdChange]);
 
-        return () => { cancelled = true; };
-    }, [budget, fee, selected, group.groupId, onCalculate, onExitThresholdChange]);
+    // Instant local update while dragging (no API call)
+    const handleSliderInput = useCallback((value: number) => {
+        setLocalExitThreshold(value);
+        setExitInputValue(String(Math.round(value * 100)));
+        // Debounce: reset any pending commit and schedule a new one
+        if (exitDebounceRef.current) clearTimeout(exitDebounceRef.current);
+        exitDebounceRef.current = setTimeout(() => commitExitThreshold(value), 300);
+    }, [commitExitThreshold]);
+
+    // Commit immediately on mouse/touch release
+    const handleSliderCommit = useCallback(() => {
+        if (exitDebounceRef.current) clearTimeout(exitDebounceRef.current);
+        commitExitThreshold(localExitThreshold);
+    }, [commitExitThreshold, localExitThreshold]);
 
     const handleExitInputBlur = useCallback(() => {
         const num = parseFloat(exitInputValue);
         if (!isNaN(num)) {
-            const rounded = Math.round(num / 5) * 5;
-            const clamped = Math.max(30, Math.min(90, rounded));
-            handleExitThresholdChange(clamped / 100);
+            const pct = num > 0 && num <= 1 ? num * 100 : num;
+            const rounded = Math.round(pct);
+            const clamped = Math.max(0, Math.min(100, rounded));
+            setLocalExitThreshold(clamped / 100);
+            setExitInputValue(String(clamped));
+            commitExitThreshold(clamped / 100);
         } else {
-            setExitInputValue(exitThreshold.toString());
+            setExitInputValue(String(Math.round(localExitThreshold * 100)));
         }
-    }, [exitInputValue, exitThreshold, handleExitThresholdChange]);
+    }, [exitInputValue, localExitThreshold, commitExitThreshold]);
 
     // Compute result: if user has overrides, recalculate locally
     const result = useMemo(() => {
@@ -170,17 +206,24 @@ export function HedgeGroupCard({
     }, [baseResult, qtyOverrides, group]);
 
     const handleQtyChange = useCallback((ticker: string, value: string) => {
-        const num = parseInt(value, 10);
-        if (isNaN(num) || num < 0) {
-            setQtyOverrides(prev => {
-                const next = { ...prev };
-                delete next[ticker];
-                return next;
-            });
-            return;
-        }
-        setQtyOverrides(prev => ({ ...prev, [ticker]: num }));
+        if (editingQtyTicker !== ticker) return;
+        setEditingQtyValue(value);
+    }, [editingQtyTicker]);
+
+    const handleQtyFocus = useCallback((ticker: string, currentValue: number) => {
+        setEditingQtyTicker(ticker);
+        setEditingQtyValue(String(currentValue));
     }, []);
+
+    const handleQtyBlur = useCallback((ticker: string) => {
+        const num = parseInt(editingQtyValue, 10);
+        if (editingQtyValue === "" || isNaN(num) || num < 0) {
+            setQtyOverrides(prev => ({ ...prev, [ticker]: 0 }));
+        } else {
+            setQtyOverrides(prev => ({ ...prev, [ticker]: num }));
+        }
+        setEditingQtyTicker(null);
+    }, [editingQtyValue]);
 
     const resetOverrides = useCallback(() => setQtyOverrides({}), []);
 
@@ -298,18 +341,22 @@ export function HedgeGroupCard({
                                                 onChange={() => toggleBucket(b.ticker)}
                                             />
                                         </td>
-                                        <td className="col-left">{b.rangeLabel}</td>
+                                        <td className="col-left col-range">{b.rangeLabel}</td>
                                         <td className="col-right mono">{b.yesPrice}</td>
                                         <td className="col-right mono">{b.noPrice}</td>
                                         {result && alloc && (
                                             <>
                                                 <td className="col-right">
                                                     <input
-                                                        type="number"
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
                                                         className="qty-input"
-                                                        min={0}
-                                                        value={qtyOverrides[b.ticker] ?? alloc.contracts}
+                                                        value={editingQtyTicker === b.ticker ? editingQtyValue : String(qtyOverrides[b.ticker] ?? alloc.contracts)}
                                                         onChange={(e) => handleQtyChange(b.ticker, e.target.value)}
+                                                        onFocus={() => handleQtyFocus(b.ticker, qtyOverrides[b.ticker] ?? alloc.contracts)}
+                                                        onBlur={() => handleQtyBlur(b.ticker)}
+                                                        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                                                         onClick={(e) => e.stopPropagation()}
                                                     />
                                                 </td>
@@ -430,44 +477,74 @@ export function HedgeGroupCard({
                                                 we exit that position early to limit losses.
                                             </p>
                                         </div>
-                                        <div className="exit-slider-container">
-                                            <label className="exit-slider-label">
-                                                Exit @ <span className="exit-slider-value">{(exitThreshold * 100).toFixed(0)}%</span> YES
-                                            </label>
-                                            <div className="exit-input-slider-row">
-                                                <input
-                                                    type="text"
-                                                    className="exit-input"
-                                                    value={exitInputValue}
-                                                    onChange={(e) => setExitInputValue(e.target.value)}
-                                                    onBlur={handleExitInputBlur}
-                                                    onKeyDown={(e) => e.key === "Enter" && handleExitInputBlur()}
+                                        <div className="exit-header-row">
+                                            <div className="exit-yes-bar-half">
+                                                <ExitYesBar
+                                                    currentYesPrice={(() => {
+                                                        const ticker = selectedExitBucketTicker ?? result.exitAnalysis?.[0]?.ticker;
+                                                        if (!ticker) return 0;
+                                                        const bucket = group.buckets.find((b) => b.ticker === ticker);
+                                                        return bucket?.yesPrice ?? 0;
+                                                    })()}
+                                                    exitThreshold={localExitThreshold}
                                                 />
-                                                <div className="exit-slider-wrapper">
-                                                    <div 
-                                                        className="exit-slider-track"
-                                                        style={{ width: `${(exitThreshold - 0.3) / 0.6 * 100}%` }}
-                                                    />
-                                                    <input
-                                                        type="range"
-                                                        min="0.30"
-                                                        max="0.90"
-                                                        step="0.05"
-                                                        value={exitThreshold}
-                                                        onChange={(e) => handleExitThresholdChange(parseFloat(e.target.value))}
-                                                        className="exit-slider"
-                                                    />
-                                                </div>
                                             </div>
-                                            <div className="exit-slider-range">
-                                                <span>30%</span>
-                                                <span>90%</span>
+                                            <div className="exit-slider-half">
+                                                <div className="exit-slider-container exit-slider-container-full">
+                                                    <label className="exit-slider-label">
+                                                        Exit @ <span className="exit-slider-value">{Math.round(localExitThreshold * 100)}%</span> YES
+                                                        <span className="exit-slider-no"> · NO exit @ {100 - Math.round(localExitThreshold * 100)}c</span>
+                                                    </label>
+                                                    <div className="exit-input-slider-row">
+                                                        <input
+                                                            type="text"
+                                                            className="exit-input"
+                                                            value={exitInputValue}
+                                                            onChange={(e) => setExitInputValue(e.target.value)}
+                                                            onBlur={handleExitInputBlur}
+                                                            onKeyDown={(e) => e.key === "Enter" && handleExitInputBlur()}
+                                                        />
+                                                        <div className="exit-slider-wrapper">
+                                                            <div 
+                                                                className="exit-slider-track"
+                                                                style={{ width: `${localExitThreshold * 100}%` }}
+                                                            />
+                                                            <input
+                                                                type="range"
+                                                                min="0"
+                                                                max="1"
+                                                                step="0.01"
+                                                                value={localExitThreshold}
+                                                                onChange={(e) => handleSliderInput(parseFloat(e.target.value))}
+                                                                onMouseUp={handleSliderCommit}
+                                                                onTouchEnd={handleSliderCommit}
+                                                                className="exit-slider"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="exit-slider-range">
+                                                        <span>0%</span>
+                                                        <span>100%</span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="exit-buckets">
-                                        {result.exitAnalysis.map((ea) => (
-                                            <div key={ea.ticker} className="exit-bucket-row">
+                                        {result.exitAnalysis.map((ea) => {
+                                            const alloc = result.allocations.find((a) => a.ticker === ea.ticker);
+                                            const contracts = alloc?.contracts ?? ea.contracts;
+                                            const entryCost = alloc != null ? alloc.cost : ea.entryCost;
+                                            const isSelectedExitBucket = selectedExitBucketTicker === ea.ticker;
+                                            return (
+                                            <div
+                                                key={ea.ticker}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => setSelectedExitBucketTicker(ea.ticker)}
+                                                onKeyDown={(e) => e.key === "Enter" && setSelectedExitBucketTicker(ea.ticker)}
+                                                className={`exit-bucket-row ${isSelectedExitBucket ? "exit-bucket-row-selected" : ""}`}
+                                            >
                                                 <div className="exit-bucket-info">
                                                     <span className="exit-bucket-label">{ea.rangeLabel}</span>
                                                     <span className="exit-bucket-ticker">{ea.ticker}</span>
@@ -478,7 +555,7 @@ export function HedgeGroupCard({
                                                             Contracts
                                                             {exitLoading && <span className="exit-spinner" />}
                                                         </span>
-                                                        <span className="exit-stat-value">{ea.contracts}</span>
+                                                        <span className="exit-stat-value">{contracts}</span>
                                                     </div>
                                                     <div className="exit-stat">
                                                         <span className="exit-stat-label">Entry NO</span>
@@ -486,7 +563,7 @@ export function HedgeGroupCard({
                                                     </div>
                                                     <div className="exit-stat">
                                                         <span className="exit-stat-label">Entry Cost</span>
-                                                        <span className="exit-stat-value">${ea.entryCost.toFixed(2)}</span>
+                                                        <span className="exit-stat-value">${entryCost.toFixed(2)}</span>
                                                     </div>
                                                     <div className="exit-stat">
                                                         <span className="exit-stat-label">Loss if Held</span>
@@ -520,22 +597,33 @@ export function HedgeGroupCard({
                                                     </div>
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
 
-                            <ReturnDistributionChart
-                                scenarios={result.scenarios}
-                                totalOutlay={result.totalOutlay}
-                            />
+                            <div className="toggle-btn-row">
+                                <button
+                                    className="show-math-btn"
+                                    onClick={() => setShowDistribution(!showDistribution)}
+                                >
+                                    {showDistribution ? "Hide distribution" : "Show distribution"}
+                                </button>
+                                <button
+                                    className="show-math-btn"
+                                    onClick={() => setShowMath(!showMath)}
+                                >
+                                    {showMath ? "Hide math" : "Show math"}
+                                </button>
+                            </div>
 
-                            <button
-                                className="show-math-btn"
-                                onClick={() => setShowMath(!showMath)}
-                            >
-                                {showMath ? "Hide math" : "Show math"}
-                            </button>
+                            {showDistribution && (
+                                <ReturnDistributionChart
+                                    scenarios={result.scenarios}
+                                    totalOutlay={result.totalOutlay}
+                                />
+                            )}
 
                             {showMath && (
                                 <div className="math-panel">

@@ -5,10 +5,11 @@ import { LookupBar } from "./components/LookupBar";
 import { MarketTable } from "./components/MarketTable";
 import { StatusBar } from "./components/StatusBar";
 import { HedgeDashboard } from "./components/HedgeDashboard";
+import { PortfolioView } from "./components/PortfolioView";
 import type { MarketRow } from "./types/market";
 import "./App.css";
 
-type Tab = "hedge" | "scanner";
+type Tab = "hedge" | "scanner" | "portfolio";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("hedge");
@@ -57,6 +58,12 @@ export default function App() {
 
         <nav className="sidebar-nav">
           <button
+            className={`sidebar-link sidebar-link-main ${activeTab === "portfolio" ? "active" : ""}`}
+            onClick={() => setActiveTab("portfolio")}
+          >
+            Portfolio
+          </button>
+          <button
             className={`sidebar-link ${activeTab === "hedge" ? "active" : ""}`}
             onClick={() => setActiveTab("hedge")}
           >
@@ -80,6 +87,10 @@ export default function App() {
         {/* Keep both tabs mounted to preserve state, hide inactive with CSS */}
         <div style={{ display: activeTab === "hedge" ? "block" : "none", height: "100%", overflowY: "auto" }}>
           <HedgeDashboard />
+        </div>
+
+        <div style={{ display: activeTab === "portfolio" ? "block" : "none", height: "100%", overflowY: "auto" }}>
+          <PortfolioView />
         </div>
 
         <div style={{ display: activeTab === "scanner" ? "flex" : "none", flexDirection: "column", height: "100%", overflowY: "auto" }}>

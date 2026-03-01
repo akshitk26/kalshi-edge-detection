@@ -17,7 +17,7 @@ interface ReturnDistributionChartProps {
 }
 
 const NUM_SIMULATIONS = 2000;
-const BIN_SIZE_PCT = 3;
+const BIN_SIZE_PCT = 5; // Fewer bins = fatter bars, clearer histogram
 
 function runSimulation(scenarios: Scenario[], outOf: number = 2000) {
     const results: number[] = [];
@@ -48,44 +48,49 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
     const [, setSimTrigger] = useState(0);
 
     const data = useMemo(() => {
-        if (!totalOutlay || scenarios.length === 0) return [];
+        if (scenarios.length === 0) return [];
 
-        // 1. Run Monte Carlo simulation (100 runs)
+        const outlay = totalOutlay || 1; // Avoid division by zero
+
+        // 1. Run Monte Carlo simulation
         const simPnls = runSimulation(scenarios, NUM_SIMULATIONS);
 
-        // 2. Force min/max bins to -100% and +100% for all cities
+        // 2. Bin range: -100% to +100% return
         const minBin = -100;
         const maxBin = 100;
-
-        // Initialize all bins with 0 to enforce correct X-axis spacing
         const binCounts: Record<number, number> = {};
         for (let b = minBin; b <= maxBin; b += BIN_SIZE_PCT) {
             binCounts[b] = 0;
         }
 
-        // 3. Populate bin counts from simulation
+        // 3. Populate bins from simulated PnL (as % of outlay)
         for (const pnl of simPnls) {
-            const returnPct = (pnl / totalOutlay) * 100;
+            const returnPct = (pnl / outlay) * 100;
             const bin = Math.floor(returnPct / BIN_SIZE_PCT) * BIN_SIZE_PCT;
-            if (binCounts[bin] !== undefined) {
-                binCounts[bin] += 1;
-            }
+            const clamped = Math.max(minBin, Math.min(maxBin, bin));
+            binCounts[clamped] = (binCounts[clamped] ?? 0) + 1;
         }
 
-        // 4. Convert to array for Recharts
-        const chartData = Object.entries(binCounts).map(([binStr, count]) => {
-            const binNum = parseInt(binStr, 10);
-            return {
-                returnBin: binNum,
-                displayLabel: `${binNum}%`,
-                frequency: count,
-                isPositive: binNum >= 0
-            };
-        });
+        // 4. Convert to array for Recharts, sort by return bin
+        const chartData = Object.entries(binCounts)
+            .map(([binStr, count]) => {
+                const binNum = parseInt(binStr, 10);
+                return {
+                    returnBin: binNum,
+                    displayLabel: `${binNum}%`,
+                    frequency: count,
+                    isPositive: binNum >= 0
+                };
+            })
+            .sort((a, b) => a.returnBin - b.returnBin);
 
-        // 5. Sort by return bin (X-axis order)
-        return chartData.sort((a, b) => a.returnBin - b.returnBin);
+        return chartData;
     }, [scenarios, totalOutlay]);
+
+    const maxFreq = data.length > 0
+        ? Math.max(...data.map((d) => d.frequency), 1)
+        : 1;
+    const yDomainMax = Math.ceil(maxFreq * 1.15); // Slight padding above max bar
 
     if (data.length === 0) return null;
 
@@ -112,28 +117,23 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                         data={data}
-                        margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
-                        barCategoryGap="2%" // Tighter gap for histogram look
-                        // Lock axes and labels so they never change
+                        margin={{ top: 10, right: 30, left: 24, bottom: 20 }}
+                        barCategoryGap="4%"
                     >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2e353e" />
                         <XAxis
                             dataKey="displayLabel"
                             tick={{ fontSize: 10, fill: "#5f666f" }}
                             stroke="#2e353e"
-                            label={{ value: 'Return % (Approx)', position: 'bottom', offset: 0, fill: "#5f666f", fontSize: 10 }}
-                            allowDataOverflow={false}
-                            // Lock X axis range
-                            domain={[-100, 100]}
+                            label={{ value: 'Return %', position: 'bottom', offset: 0, fill: "#5f666f", fontSize: 10 }}
+                            interval={Math.max(0, Math.floor(data.length / 12))}
                         />
                         <YAxis
                             tick={{ fontSize: 10, fill: "#5f666f" }}
-                            tickFormatter={(val) => `${val}`} // Just frequency number
-                            label={{ value: 'Frequency (out of 1000)', angle: -90, position: 'center', fill: "#5f666f", fontSize: 12, offset: 30 }}
+                            tickFormatter={(val) => `${val}`}
+                            label={{ value: `Frequency (of ${NUM_SIMULATIONS} sims)`, angle: -90, position: 'center', fill: "#5f666f", fontSize: 11, offset: 30 }}
                             stroke="#2e353e"
-                            domain={[0, 1000]}
-                            allowDataOverflow={false}
-                            // Prevent axis from changing
+                            domain={[0, yDomainMax]}
                         />
                         <Tooltip
                             contentStyle={{
@@ -143,11 +143,9 @@ export function ReturnDistributionChart({ scenarios, totalOutlay }: ReturnDistri
                                 fontSize: "12px",
                                 color: "#d4d8de"
                             }}
-                            cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                            formatter={(value) => {
-                                return [`${value ?? 0}`, "Frequency"];
-                            }}
-                            labelFormatter={(label) => `Return Range: ~${label}`}
+                            cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
+                            formatter={(value: number | undefined) => [`${value ?? 0}`, "Count"]}
+                            labelFormatter={(label) => `Return: ${label}`}
                         />
                         <Bar dataKey="frequency" radius={[4, 4, 0, 0]}>
                             {data.map((entry, index) => (
