@@ -3,6 +3,7 @@ import type {
   PortfolioData,
   PortfolioHistory,
   PortfolioSnapshot,
+  PortfolioStats,
 } from "../types/portfolio";
 
 const API_BASE = "http://localhost:5050";
@@ -11,6 +12,7 @@ interface UsePortfolioResult {
   configured: boolean | null;
   data: PortfolioData | null;
   history: PortfolioSnapshot[];
+  stats: PortfolioStats | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -20,6 +22,7 @@ export function usePortfolio(): UsePortfolioResult {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [data, setData] = useState<PortfolioData | null>(null);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const [stats, setStats] = useState<PortfolioStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(null);
@@ -35,9 +38,10 @@ export function usePortfolio(): UsePortfolioResult {
         return;
       }
 
-      const [balanceRes, historyRes] = await Promise.all([
+      const [balanceRes, historyRes, statsRes] = await Promise.all([
         fetch(`${API_BASE}/api/portfolio/balance`),
         fetch(`${API_BASE}/api/portfolio/history`),
+        fetch(`${API_BASE}/api/portfolio/stats`),
       ]);
 
       if (!balanceRes.ok) throw new Error("Failed to fetch balance");
@@ -48,6 +52,11 @@ export function usePortfolio(): UsePortfolioResult {
 
       setData(balanceData);
       setHistory(historyData.snapshots);
+
+      if (statsRes.ok) {
+        setStats(await statsRes.json());
+      }
+
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -64,5 +73,5 @@ export function usePortfolio(): UsePortfolioResult {
     };
   }, [fetchAll]);
 
-  return { configured, data, history, loading, error, refresh: fetchAll };
+  return { configured, data, history, stats, loading, error, refresh: fetchAll };
 }

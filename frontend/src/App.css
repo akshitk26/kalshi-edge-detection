@@ -1785,6 +1785,58 @@
   line-height: 1.1;
 }
 
+/* ─ Scrolling digit animation ─ */
+.scroll-value {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.scroll-char {
+  display: inline-block;
+}
+
+.scroll-static {
+  line-height: 1.1;
+}
+
+.scroll-digit {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  height: 1.15em;
+  vertical-align: bottom;
+}
+
+.scroll-digit-inner {
+  display: inline-block;
+}
+
+.scroll-digit-up {
+  animation: digit-roll-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.scroll-digit-down {
+  animation: digit-roll-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes digit-roll-up {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes digit-roll-down {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 .portfolio-change {
   display: flex;
   align-items: center;
@@ -2052,6 +2104,126 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-bottom: 0;
+}
+
+/* ─ Trade performance section ─ */
+.portfolio-performance {
+  margin-top: 24px;
+}
+
+.portfolio-trade-highlights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.trade-highlight-card {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+}
+
+.trade-hl-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.trade-hl-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+  min-width: 130px;
+}
+
+.trade-hl-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.trade-hl-detail-label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.trade-hl-detail-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.trade-highlight-best {
+  border-left: 3px solid var(--green);
+}
+
+.trade-highlight-worst {
+  border-left: 3px solid var(--red);
+}
+
+.trade-highlight-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.trade-highlight-icon {
+  font-size: 10px;
+}
+
+.trade-highlight-best .trade-highlight-icon {
+  color: var(--green);
+}
+
+.trade-highlight-worst .trade-highlight-icon {
+  color: var(--red);
+}
+
+.trade-highlight-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trade-highlight-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.trade-highlight-pct {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.trade-highlight-dollars {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.trade-highlight-ticker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* ─ Skeleton for portfolio loading ─ */

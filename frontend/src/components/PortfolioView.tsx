@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   AreaChart,
   Area,
@@ -10,10 +10,75 @@ import {
 import { usePortfolio } from "../hooks/usePortfolio";
 import type {
   MarketPosition,
+  PortfolioStats,
+  TradeRecord,
   TimeRange,
 } from "../types/portfolio";
 
 const TIME_RANGES: TimeRange[] = ["1D", "1W", "1M", "3M", "ALL"];
+
+function ScrollingValue({ value }: { value: string }) {
+  const prevRef = useRef(value);
+  const counterRef = useRef(0);
+
+  const prev = prevRef.current;
+  const changed = value !== prev;
+  const counter = changed ? counterRef.current + 1 : counterRef.current;
+
+  useEffect(() => {
+    if (prevRef.current !== value) {
+      counterRef.current += 1;
+      prevRef.current = value;
+    }
+  }, [value]);
+
+  const prevChars = prev.split("");
+  const nextChars = value.split("");
+  const maxLen = Math.max(prevChars.length, nextChars.length);
+  const pPad =
+    prevChars.length < maxLen
+      ? Array(maxLen - prevChars.length).fill(" ").concat(prevChars)
+      : prevChars;
+  const nPad =
+    nextChars.length < maxLen
+      ? Array(maxLen - nextChars.length).fill(" ").concat(nextChars)
+      : nextChars;
+
+  return (
+    <span className="scroll-value">
+      {nPad.map((ch, i) => {
+        const oldCh = pPad[i] ?? "";
+        const digitChanged = ch !== oldCh && changed;
+        const isDigit = /\d/.test(ch);
+        if (!isDigit || !digitChanged) {
+          return (
+            <span key={i} className="scroll-char scroll-static">
+              {ch}
+            </span>
+          );
+        }
+        const oldNum = parseInt(oldCh);
+        const newNum = parseInt(ch);
+        const dir =
+          !isNaN(oldNum) && !isNaN(newNum)
+            ? newNum > oldNum
+              ? "up"
+              : "down"
+            : "up";
+        return (
+          <span key={i} className="scroll-char scroll-digit">
+            <span
+              key={counter}
+              className={`scroll-digit-inner scroll-digit-${dir}`}
+            >
+              {ch}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 function rangeMs(range: TimeRange): number {
   switch (range) {
@@ -66,6 +131,14 @@ function formatTooltipTime(ts: string): string {
   });
 }
 
+function shortTicker(ticker: string): string {
+  const parts = ticker.split("-");
+  if (parts.length < 3) return ticker;
+  const series = parts[0].replace(/^KX/, "");
+  const bucket = parts.slice(2).join("-");
+  return `${series} ${bucket}`;
+}
+
 interface ChartPoint {
   ts: string;
   value: number;
@@ -73,7 +146,7 @@ interface ChartPoint {
 }
 
 export function PortfolioView() {
-  const { configured, data, history, loading, error } = usePortfolio();
+  const { configured, data, history, stats, loading, error } = usePortfolio();
   const [range, setRange] = useState<TimeRange>("1W");
   const [hoverValue, setHoverValue] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<string | null>(null);
@@ -97,6 +170,8 @@ export function PortfolioView() {
     [filteredHistory, range]
   );
 
+  const startValue = chartData.length > 0 ? chartData[0].value : 0;
+
   const { change, changePct, isPositive } = useMemo(() => {
     if (chartData.length < 2)
       return { change: 0, changePct: 0, isPositive: true };
@@ -111,6 +186,15 @@ export function PortfolioView() {
     hoverValue !== null
       ? hoverValue * 100
       : (data?.balance.total_value ?? 0);
+
+  const hoverChange = hoverValue !== null ? (hoverValue - startValue) * 100 : null;
+  const hoverPct = hoverValue !== null && startValue > 0
+    ? ((hoverValue - startValue) / startValue) * 100
+    : null;
+  const hoverIsPositive = hoverChange !== null ? hoverChange >= 0 : isPositive;
+  const activeColor = hoverValue !== null
+    ? (hoverIsPositive ? "var(--green)" : "var(--red)")
+    : (isPositive ? "var(--green)" : "var(--red)");
 
   const handleMouseMove = useCallback(
     (state: { activePayload?: Array<{ payload: ChartPoint }> }) => {
@@ -202,16 +286,22 @@ KALSHI_PRIVATE_KEY_PATH=~/.kalshi/private_key.pem`}
       {/* Header: total value + change */}
       <div className="portfolio-header">
         <div className="portfolio-total">
-          {formatDollars(displayValue)}
+          <ScrollingValue value={formatDollars(displayValue)} />
         </div>
         <div
           className="portfolio-change"
-          style={{ color: accentColor }}
+          style={{ color: activeColor }}
         >
-          {hoverTime ? (
-            <span className="portfolio-hover-time">
-              {formatTooltipTime(hoverTime)}
-            </span>
+          {hoverValue !== null && hoverChange !== null && hoverPct !== null ? (
+            <>
+              <span>{formatCompact(hoverChange)}</span>
+              <span className="portfolio-change-pct">
+                ({hoverPct >= 0 ? "+" : ""}{hoverPct.toFixed(2)}%)
+              </span>
+              <span className="portfolio-hover-time">
+                {hoverTime ? formatTooltipTime(hoverTime) : ""}
+              </span>
+            </>
           ) : (
             <>
               <span>{formatCompact(change)}</span>
@@ -335,10 +425,146 @@ KALSHI_PRIVATE_KEY_PATH=~/.kalshi/private_key.pem`}
         </div>
       )}
 
+      {/* Trade Performance */}
+      {stats && <TradePerformance stats={stats} />}
+
       {/* Positions */}
       {data && data.positions.length > 0 && (
         <PositionsTable positions={data.positions} />
       )}
+    </div>
+  );
+}
+
+function TradeHighlight({
+  label,
+  icon,
+  trade,
+  variant,
+}: {
+  label: string;
+  icon: string;
+  trade: TradeRecord;
+  variant: "best" | "worst";
+}) {
+  const colorClass = variant === "best" ? "val-pos" : "val-neg";
+  const pctSign = variant === "best" ? "+" : "";
+  return (
+    <div className={`trade-highlight-card trade-highlight-${variant}`}>
+      <div className="trade-hl-left">
+        <div className="trade-highlight-header">
+          <span className="trade-highlight-icon" dangerouslySetInnerHTML={{ __html: icon }} />
+          <span className="trade-highlight-title">{label}</span>
+        </div>
+        <div className="trade-highlight-row">
+          <span className={`trade-highlight-pct ${colorClass}`}>
+            {pctSign}{trade.pct.toFixed(1)}%
+          </span>
+          <span className={`trade-highlight-dollars ${colorClass}`}>
+            {formatCompact(trade.pnl)}
+          </span>
+        </div>
+        <span className="trade-highlight-ticker">
+          {shortTicker(trade.ticker)}
+        </span>
+      </div>
+      <div className="trade-hl-right">
+        <div className="trade-hl-detail-row">
+          <span className="trade-hl-detail-label">Contracts</span>
+          <span className="trade-hl-detail-value">{trade.count}</span>
+        </div>
+        <div className="trade-hl-detail-row">
+          <span className="trade-hl-detail-label">Bought @</span>
+          <span className="trade-hl-detail-value">{trade.entry_price}¢</span>
+        </div>
+        <div className="trade-hl-detail-row">
+          <span className="trade-hl-detail-label">
+            {trade.type === "sell" ? "Sold @" : "Settled @"}
+          </span>
+          <span className="trade-hl-detail-value">{trade.exit_price}¢</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradePerformance({ stats }: { stats: PortfolioStats }) {
+  return (
+    <div className="portfolio-performance">
+      {/* Best / Worst trade highlight cards */}
+      <div className="portfolio-trade-highlights">
+        {stats.best_trade && (
+          <TradeHighlight
+            label="Best Trade"
+            icon="&#9650;"
+            trade={stats.best_trade}
+            variant="best"
+          />
+        )}
+        {stats.worst_trade && (
+          <TradeHighlight
+            label="Worst Trade"
+            icon="&#9660;"
+            trade={stats.worst_trade}
+            variant="worst"
+          />
+        )}
+      </div>
+
+      {/* Detailed stats grid */}
+      <h3 className="portfolio-section-title">Performance</h3>
+      <div className="portfolio-stats">
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Total P&L</span>
+          <span className={`portfolio-stat-value ${stats.total_pnl >= 0 ? "val-pos" : "val-neg"}`}>
+            {formatCompact(stats.total_pnl)}
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Win Rate</span>
+          <span className="portfolio-stat-value">
+            {stats.win_rate}%
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">W / L</span>
+          <span className="portfolio-stat-value">
+            <span className="val-pos">{stats.wins}</span>
+            {" / "}
+            <span className="val-neg">{stats.losses}</span>
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Avg P&L</span>
+          <span className={`portfolio-stat-value ${stats.avg_pnl >= 0 ? "val-pos" : "val-neg"}`}>
+            {formatCompact(stats.avg_pnl)}
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Peak Value</span>
+          <span className="portfolio-stat-value">
+            {formatDollars(stats.peak_value)}
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Total Fees</span>
+          <span className="portfolio-stat-value" style={{ color: "var(--text-muted)" }}>
+            {formatDollars(stats.total_fees)}
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Markets Traded</span>
+          <span className="portfolio-stat-value">
+            {stats.markets_traded}
+          </span>
+        </div>
+        <div className="portfolio-stat-card">
+          <span className="portfolio-stat-label">Biggest Win</span>
+          <span className="portfolio-stat-value val-pos">
+            {formatCompact(stats.biggest_win)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -177,7 +177,7 @@ class HedgeCalculator:
     """
 
     # ── Viability thresholds ──
-    MAX_NO_PRICE = 85  # Don't buy NO above 85c (too expensive, tiny profit margin)
+    MAX_NO_PRICE = 87  # Don't buy NO above 87c (too expensive, tiny profit margin)
     MIN_NO_PRICE = 5  # Don't buy NO below 5c (sucker bet, very likely to lose)
     MAX_FEE_RATIO = 0.5  # Warn if fees exceed 50% of contract cost
 

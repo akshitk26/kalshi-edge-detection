@@ -34,4 +34,32 @@ export interface PortfolioHistory {
   count: number;
 }
 
+export interface TradeRecord {
+  ticker: string;
+  pnl: number;
+  pct: number;
+  cost_basis: number;
+  entry_price: number;
+  exit_price: number;
+  count: number;
+  ts: string;
+  type: string;
+}
+
+export interface PortfolioStats {
+  best_trade: TradeRecord | null;
+  worst_trade: TradeRecord | null;
+  total_trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  total_pnl: number;
+  total_fees: number;
+  avg_pnl: number;
+  peak_value: number;
+  markets_traded: number;
+  biggest_win: number;
+  biggest_loss: number;
+}
+
 export type TimeRange = "1D" | "1W" | "1M" | "3M" | "ALL";

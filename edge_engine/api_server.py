@@ -587,6 +587,131 @@ def portfolio_history():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/portfolio/stats", methods=["GET"])
+def portfolio_stats():
+    """Compute per-market trade stats: best/worst trade, win rate, etc."""
+    if not _kalshi_client or not _kalshi_client.has_auth:
+        return jsonify({"error": "API key not configured"}), 401
+    try:
+        fills = _kalshi_client.get_fills()
+        settlements = _kalshi_client.get_settlements()
+        balance_info = _kalshi_client.get_balance()
+
+        from collections import defaultdict
+        positions: dict[str, dict] = defaultdict(lambda: {"count": 0, "total_cost": 0})
+
+        events: list[dict] = []
+        for f in fills:
+            events.append({"ts": f.get("created_time") or "", "type": "fill", "fill": f})
+        for s in settlements:
+            events.append({"ts": s.get("settled_time", ""), "type": "settlement", "settlement": s})
+        events.sort(key=lambda e: e["ts"])
+
+        completed_trades: list[dict] = []
+        total_fees = 0
+        markets_traded: set[str] = set()
+
+        for ev in events:
+            if ev["type"] == "fill":
+                f = ev["fill"]
+                side = f.get("side", "")
+                action = f.get("action", "")
+                count = f.get("count", 0)
+                yp = f.get("yes_price", 0)
+                np_ = f.get("no_price", 0)
+                fee = round(float(f.get("fee_cost", "0")) * 100)
+                ticker = f.get("ticker", "")
+                ts = f.get("created_time", "")
+                total_fees += fee
+                markets_traded.add(ticker.rsplit("-", 1)[0] if "-" in ticker else ticker)
+
+                if action == "buy":
+                    buy_price = np_ if side == "no" else yp
+                    positions[ticker]["count"] += count
+                    positions[ticker]["total_cost"] += count * buy_price
+
+                else:
+                    received_per = np_ if side == "yes" else yp
+                    pos = positions[ticker]
+                    if pos["count"] > 0:
+                        avg_cost = pos["total_cost"] / pos["count"]
+                        cost_basis = avg_cost * count
+                    else:
+                        avg_cost = 0
+                        cost_basis = 0
+                    received = count * received_per
+                    pnl = round(received - cost_basis - fee)
+                    positions[ticker]["count"] -= count
+                    positions[ticker]["total_cost"] -= round(cost_basis)
+                    completed_trades.append({
+                        "ticker": ticker,
+                        "pnl": pnl,
+                        "cost_basis": round(cost_basis),
+                        "pct": round(pnl / cost_basis * 100, 1) if cost_basis > 0 else 0,
+                        "count": count,
+                        "entry_price": round(avg_cost),
+                        "exit_price": received_per,
+                        "ts": ts,
+                        "type": "sell",
+                    })
+
+            elif ev["type"] == "settlement":
+                s = ev["settlement"]
+                ticker = s.get("ticker", "")
+                revenue = s.get("revenue", 0)
+                cost_basis = positions[ticker]["total_cost"]
+                remaining = positions[ticker]["count"]
+                if remaining > 0 or cost_basis > 0:
+                    pnl = revenue - cost_basis
+                    avg_cost = cost_basis / remaining if remaining > 0 else 0
+                    settle_per = round(revenue / remaining) if remaining > 0 else 0
+                    completed_trades.append({
+                        "ticker": ticker,
+                        "pnl": pnl,
+                        "cost_basis": round(cost_basis),
+                        "pct": round(pnl / cost_basis * 100, 1) if cost_basis > 0 else 0,
+                        "count": remaining,
+                        "entry_price": round(avg_cost),
+                        "exit_price": settle_per,
+                        "ts": s.get("settled_time", ""),
+                        "type": "settlement",
+                    })
+                positions[ticker] = {"count": 0, "total_cost": 0}
+
+        meaningful = [t for t in completed_trades if t["pnl"] != 0 or t["count"] > 0]
+        wins = [t for t in meaningful if t["pnl"] > 0]
+        losses = [t for t in meaningful if t["pnl"] < 0]
+        with_cost = [t for t in completed_trades if t.get("cost_basis", 0) > 0]
+        best = max(with_cost, key=lambda t: t["pct"]) if with_cost else None
+        worst = min(with_cost, key=lambda t: t["pct"]) if with_cost else None
+        total_pnl = balance_info["total_value"] - 1000
+
+        peak = 0
+        running = 0
+        for t in completed_trades:
+            running += t["pnl"]
+            peak = max(peak, running)
+
+        return jsonify({
+            "best_trade": best,
+            "worst_trade": worst,
+            "total_trades": len(meaningful),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": round(len(wins) / len(meaningful) * 100, 1) if meaningful else 0,
+            "total_pnl": total_pnl,
+            "total_fees": total_fees,
+            "avg_pnl": round(sum(t["pnl"] for t in meaningful) / len(meaningful)) if meaningful else 0,
+            "peak_value": 1000 + peak,
+            "markets_traded": len(markets_traded),
+            "biggest_win": max((t["pnl"] for t in completed_trades), default=0),
+            "biggest_loss": min((t["pnl"] for t in completed_trades), default=0),
+        })
+    except Exception as e:
+        _logger.error(f"Portfolio stats error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify(
