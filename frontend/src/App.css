@@ -385,6 +385,23 @@
   gap: 10px;
 }
 
+.header-kalshi-link {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.header-kalshi-link:hover {
+  background: var(--accent);
+  color: var(--bg-1);
+}
+
 .overround-badge {
   font-size: var(--fs-xs);
   font-family: var(--font-mono);
@@ -432,6 +449,76 @@
 /* ──────────────────────────────────────── */
 /* ─ Bucket Table ─ */
 /* ──────────────────────────────────────── */
+.bucket-qty-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.bucket-action-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  padding: 5px 12px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.bucket-action-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--bg-2);
+}
+
+.bucket-qty-reset-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.bucket-qty-reset-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.reset-to-auto-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.reset-to-auto-btn.reset-to-auto-active {
+  color: var(--text-primary);
+  background: var(--bg-2);
+  border: 1px solid var(--accent);
+}
+
+.reset-to-auto-btn.reset-to-auto-active:hover {
+  background: var(--bg-3);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.reset-to-auto-btn.reset-to-auto-gray {
+  color: var(--text-muted);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  cursor: default;
+}
+
 .bucket-table {
   width: 100%;
   border-collapse: collapse;
@@ -558,7 +645,7 @@
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
   padding: 12px 0;
 }
@@ -566,11 +653,13 @@
 .summary-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 16px;
+  gap: 2px;
+  padding: 14px 16px;
   background: var(--bg-2);
   border-radius: var(--radius);
   border: 1px solid var(--bg-3);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .summary-label {
@@ -579,26 +668,16 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  white-space: nowrap;
 }
 
 .summary-value {
   font-family: var(--font-mono);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
-}
-
-@media (min-width: 1100px) {
-  .summary-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .summary-value {
-    text-align: right;
-  }
+  line-height: 1.3;
 }
 
 .summary-value.val-pos {
@@ -616,6 +695,10 @@
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
 /* ──────────────────────────────────────── */
@@ -1925,9 +2008,15 @@
 /* ─ Stats row ─ */
 .portfolio-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-top: 20px;
+}
+
+@media (max-width: 700px) {
+  .portfolio-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .portfolio-stat-card {
@@ -1955,17 +2044,18 @@
   color: var(--text-primary);
 }
 
-@media (min-width: 1100px) {
-  .portfolio-stat-card {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.portfolio-stat-value.val-pos {
+  color: var(--green);
+}
 
-  .portfolio-stat-value {
-    text-align: right;
-  }
+.portfolio-stat-value.val-neg {
+  color: var(--red);
+}
+
+.portfolio-stat-value .val-pos,
+.portfolio-stat-value .val-neg {
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 /* ─ Positions table ─ */

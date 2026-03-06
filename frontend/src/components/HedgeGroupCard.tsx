@@ -16,6 +16,9 @@ interface HedgeGroupCardProps {
         selected?: string[],
         exitThreshold?: number
     ) => Promise<HedgeResult | null>;
+    expanded?: boolean;
+    onToggle?: () => void;
+    onResultLoad?: (groupId: string, result: HedgeResult) => void;
 }
 
 /**
@@ -94,6 +97,9 @@ export function HedgeGroupCard({
     exitThreshold,
     onExitThresholdChange,
     onCalculate,
+    expanded = false,
+    onToggle,
+    onResultLoad,
 }: HedgeGroupCardProps) {
     const [baseResult, setBaseResult] = useState<HedgeResult | null>(null);
     const [loading, setLoading] = useState(false);
@@ -104,7 +110,6 @@ export function HedgeGroupCard({
     const [selected, setSelected] = useState<Set<string>>(
         new Set(group.buckets.map((b) => b.ticker))
     );
-    const [expanded, setExpanded] = useState(false);
     const [showMath, setShowMath] = useState(false);
     const [showDistribution, setShowDistribution] = useState(false);
     const [qtyOverrides, setQtyOverrides] = useState<Record<string, number>>({});
@@ -225,7 +230,25 @@ export function HedgeGroupCard({
         setEditingQtyTicker(null);
     }, [editingQtyValue]);
 
-    const resetOverrides = useCallback(() => setQtyOverrides({}), []);
+    const resetOverrides = useCallback(() => {
+        setQtyOverrides({});
+        setEditingQtyTicker(null);
+    }, []);
+
+    const equalizeVolume = useCallback(() => {
+        if (!result) return;
+        const currentQtys = result.allocations.map((a, i) =>
+            qtyOverrides[group.buckets[i].ticker] ?? a.contracts
+        );
+        const positiveQtys = currentQtys.filter((q) => q > 0);
+        const minQty = positiveQtys.length > 0 ? Math.min(...positiveQtys) : 0;
+        const next: Record<string, number> = {};
+        group.buckets.forEach((b) => {
+            next[b.ticker] = minQty;
+        });
+        setQtyOverrides(next);
+        setEditingQtyTicker(null);
+    }, [result, group.buckets, qtyOverrides]);
 
     const hasOverrides = Object.keys(qtyOverrides).length > 0;
 
@@ -250,13 +273,6 @@ export function HedgeGroupCard({
         };
         return `${months[match[2]] || match[2]} ${parseInt(match[3])}`;
     };
-
-    const overroundClass =
-        group.overround > 5
-            ? "overround-high"
-            : group.overround > 0
-                ? "overround-mid"
-                : "overround-none";
 
     const qualityClass = result ? `quality-${result.quality}` : "";
     const qualityLabel = result
@@ -285,14 +301,19 @@ export function HedgeGroupCard({
                     )}
                 </div>
                 <div className="hedge-card-badges">
-                    <span className={`overround-badge ${overroundClass}`}>
-                        {group.overround > 0 ? "+" : ""}
-                        {group.overround.toFixed(1)}% overround
-                    </span>
                     <span className="bucket-count">{group.numBuckets} buckets</span>
                     {!group.allHaveLiquidity && (
                         <span className="liq-badge-warn">Low liq</span>
                     )}
+                    <a
+                        href={group.kalshiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="header-kalshi-link"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        Kalshi ↗
+                    </a>
                 </div>
                 <span className="expand-arrow">{expanded ? "v" : ">"}</span>
             </div>
@@ -302,6 +323,31 @@ export function HedgeGroupCard({
                     {result && result.quality === "poor" && result.qualityReason && (
                         <div className="quality-warning">
                             {result.qualityReason}
+                        </div>
+                    )}
+
+                    {result && (
+                        <div className="bucket-qty-actions">
+                            <button
+                                type="button"
+                                className="bucket-action-btn"
+                                onClick={equalizeVolume}
+                            >
+                                Equal volume
+                            </button>
+                            <div className="bucket-qty-reset-wrap">
+                                {hasOverrides && (
+                                    <span className="bucket-qty-reset-label">Custom quantities active</span>
+                                )}
+                                <button
+                                    type="button"
+                                    className={`reset-to-auto-btn ${hasOverrides ? "reset-to-auto-active" : "reset-to-auto-gray"}`}
+                                    onClick={hasOverrides ? resetOverrides : undefined}
+                                    disabled={!hasOverrides}
+                                >
+                                    Reset to auto
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -321,7 +367,6 @@ export function HedgeGroupCard({
                                     </>
                                 )}
                                 <th className="col-center">Liq</th>
-                                <th className="col-left">Link</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -378,16 +423,6 @@ export function HedgeGroupCard({
                                                 <span className="liq-warn">LOW</span>
                                             )}
                                         </td>
-                                        <td>
-                                            <a
-                                                href={b.kalshiUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="link-btn"
-                                            >
-                                                Kalshi
-                                            </a>
-                                        </td>
                                     </tr>
                                 );
                             })}
@@ -397,15 +432,6 @@ export function HedgeGroupCard({
                     {/* Summary */}
                     {result && (
                         <div className="hedge-summary">
-                            {hasOverrides && (
-                                <div className="override-banner">
-                                    Custom quantities active
-                                    <button className="override-reset" onClick={resetOverrides}>
-                                        Reset to auto
-                                    </button>
-                                </div>
-                            )}
-
                             <div className="summary-grid">
                                 <div className="summary-item">
                                     <span className="summary-label">Total Outlay</span>

@@ -1,11 +1,41 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useHedgeGroups } from "../hooks/useHedgeGroups";
 import { HedgeGroupCard } from "./HedgeGroupCard";
+import type { HedgeResult } from "../types/hedge";
 
 const LS_BUDGET = "alphacast_budget";
 const LS_FEE = "alphacast_fee";
 const LS_CITY = "alphacast_city";
 const LS_EXIT_THRESHOLD = "alphacast_exit_threshold";
+
+/** Parse group date "28FEB26" (DDMMMYY) to YYYY-MM-DD for comparison. */
+function groupDateToIso(dateStr: string): string | null {
+    const match = dateStr.match(/^(\d{2})([A-Z]{3})(\d{2})$/);
+    if (!match) return null;
+    const months: Record<string, string> = {
+        JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+        JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+    };
+    const mm = months[match[2]];
+    if (!mm) return null;
+    const yy = parseInt(match[3], 10);
+    const yyyy = yy >= 0 && yy <= 50 ? 2000 + yy : 1900 + yy;
+    return `${yyyy}-${mm}-${match[1]}`;
+}
+
+/** True if group date is today (local date). */
+function isToday(dateStr: string): boolean {
+    const iso = groupDateToIso(dateStr);
+    if (!iso) return false;
+    const today = new Date();
+    const todayIso = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+    return iso === todayIso;
+}
+
+/** Almost resolved: win prob very one-sided. */
+function isAlmostResolved(result: HedgeResult): boolean {
+    return result.winProbability >= 95 || result.winProbability <= 5;
+}
 
 /** City → state + short code. */
 const CITIES: Record<string, { state: string; code: string }> = {
@@ -41,6 +71,7 @@ export function HedgeDashboard() {
     });
     const [budgetStr, setBudgetStr] = useState(budget.toString());
     const [feeStr, setFeeStr] = useState((fee * 100).toFixed(1));
+    const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 
     useEffect(() => { localStorage.setItem(LS_BUDGET, budget.toString()); }, [budget]);
     useEffect(() => { localStorage.setItem(LS_FEE, fee.toString()); }, [fee]);
@@ -73,7 +104,33 @@ export function HedgeDashboard() {
         return map;
     }, [groups]);
 
-    const selectedCount = cityGroupsMap.get(selectedCity)?.length ?? 0;
+    const cityGroups = cityGroupsMap.get(selectedCity) ?? [];
+    const selectedCount = cityGroups.length;
+
+    // Default expand first group so markets show; when its result loads, switch to next day if current is poor or almost resolved
+    useEffect(() => {
+        if (cityGroups.length === 0) return;
+        const ids = new Set(cityGroups.map((g) => g.groupId));
+        if (!expandedGroupId || !ids.has(expandedGroupId)) {
+            setExpandedGroupId(cityGroups[0].groupId);
+        }
+    }, [selectedCity, cityGroups, expandedGroupId]);
+
+    const handleResultLoad = useCallback((groupId: string, result: HedgeResult) => {
+        setExpandedGroupId((current) => {
+            if (current !== groupId) return current;
+            const list = cityGroupsMap.get(selectedCity) ?? [];
+            const idx = list.findIndex((g) => g.groupId === groupId);
+            if (idx < 0) return current;
+            const isCurrentDay = isToday(list[idx].date);
+            const poorOrResolved = result.quality === "poor" || isAlmostResolved(result);
+            if (isCurrentDay && poorOrResolved && list.length > 1) {
+                const nextGroup = list[idx + 1];
+                return nextGroup ? nextGroup.groupId : current;
+            }
+            return current;
+        });
+    }, [selectedCity, cityGroupsMap]);
 
     const handleBudgetBlur = () => {
         const val = parseFloat(budgetStr);
@@ -184,13 +241,13 @@ export function HedgeDashboard() {
             )}
 
             {/* ── Render ALL cities, hide non-selected (preserves state) ── */}
-            {Array.from(cityGroupsMap.entries()).map(([city, cityGroups]) => (
+            {Array.from(cityGroupsMap.entries()).map(([city, cityGroupList]) => (
                 <div
                     key={city}
                     className="city-dates"
                     style={{ display: city === selectedCity ? undefined : "none" }}
                 >
-                    {cityGroups.map((group) => (
+                    {cityGroupList.map((group) => (
                         <HedgeGroupCard
                             key={group.groupId}
                             group={group}
@@ -199,6 +256,9 @@ export function HedgeDashboard() {
                             exitThreshold={exitThreshold}
                             onExitThresholdChange={setExitThreshold}
                             onCalculate={calculateAllocation}
+                            expanded={expandedGroupId === group.groupId}
+                            onToggle={() => setExpandedGroupId((id) => (id === group.groupId ? null : group.groupId))}
+                            onResultLoad={handleResultLoad}
                         />
                     ))}
                 </div>

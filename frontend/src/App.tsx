@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useMarkets } from "./hooks/useMarkets";
 import { FilterBar, useSortedMarkets } from "./components/FilterBar";
 import { LookupBar } from "./components/LookupBar";
@@ -11,8 +11,26 @@ import "./App.css";
 
 type Tab = "hedge" | "scanner" | "portfolio";
 
+const VALID_TABS: Tab[] = ["portfolio", "hedge", "scanner"];
+
+function readTabFromHash(): Tab {
+  const hash = window.location.hash.replace("#", "");
+  return VALID_TABS.includes(hash as Tab) ? (hash as Tab) : "portfolio";
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("hedge");
+  const [activeTab, setActiveTab] = useState<Tab>(readTabFromHash);
+
+  const switchTab = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+    window.location.hash = tab;
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(readTabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   // --- Scanner state (only used when tab === "scanner") ---
   const {
@@ -59,19 +77,19 @@ export default function App() {
         <nav className="sidebar-nav">
           <button
             className={`sidebar-link sidebar-link-main ${activeTab === "portfolio" ? "active" : ""}`}
-            onClick={() => setActiveTab("portfolio")}
+            onClick={() => switchTab("portfolio")}
           >
             Portfolio
           </button>
           <button
             className={`sidebar-link ${activeTab === "hedge" ? "active" : ""}`}
-            onClick={() => setActiveTab("hedge")}
+            onClick={() => switchTab("hedge")}
           >
             Hedge
           </button>
           <button
             className={`sidebar-link ${activeTab === "scanner" ? "active" : ""}`}
-            onClick={() => setActiveTab("scanner")}
+            onClick={() => switchTab("scanner")}
           >
             Scanner
           </button>
